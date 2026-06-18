@@ -6,6 +6,8 @@
 	<string>Need Bluetooth access to connect to your thermal printer</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Need Bluetooth access to connect to your thermal printer</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Ahar OS needs Face ID/Touch ID access to authenticate cashiers and unlock the register shift.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

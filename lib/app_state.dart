@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -169,12 +170,14 @@ class InvoiceModel {
   final String id;
   final String tableId;
   final String dateTime;
+  final String? checkInTime;
   final List<CartItem> items;
   final int subtotal;
   final int gst;
   final int packaging;
   final int total;
   final int? originalTotal;
+  final double discountPercent;
 
   DateTime? _cachedDateTime;
   DateTime get parsedDateTime {
@@ -186,24 +189,28 @@ class InvoiceModel {
     required this.id,
     required this.tableId,
     required this.dateTime,
+    this.checkInTime,
     required this.items,
     required this.subtotal,
     required this.gst,
     required this.packaging,
     required this.total,
     this.originalTotal,
+    this.discountPercent = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'tableId': tableId,
     'dateTime': dateTime,
+    'checkInTime': checkInTime,
     'items': items.map((i) => i.toJson()).toList(),
     'subtotal': subtotal,
     'gst': gst,
     'packaging': packaging,
     'total': total,
     'originalTotal': originalTotal ?? total,
+    'discountPercent': discountPercent,
   };
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -212,12 +219,70 @@ class InvoiceModel {
       id: json['id'],
       tableId: json['tableId'],
       dateTime: json['dateTime'],
+      checkInTime: json['checkInTime'],
       items: itemsList.map((i) => CartItem.fromJson(i)).toList(),
       subtotal: json['subtotal'],
       gst: json['gst'],
       packaging: json['packaging'],
       total: json['total'],
       originalTotal: json['originalTotal'] ?? json['total'],
+      discountPercent: (json['discountPercent'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+// --- BLUETOOTH DIAGNOSTIC LOG MODEL ---
+
+class BluetoothLogEntry {
+  final DateTime timestamp;
+  final String event;      // e.g. 'CONNECT', 'DISCONNECT', 'PRINT', 'SCAN', 'ERROR'
+  final String message;    // Human-readable description
+  final String diagnosis;  // 'APP_SIDE', 'MACHINE_SIDE', 'NETWORK', 'UNKNOWN'
+  final String? macAddress;
+  final String? errorDetail;
+
+  BluetoothLogEntry({
+    required this.event,
+    required this.message,
+    required this.diagnosis,
+    this.macAddress,
+    this.errorDetail,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+
+  String get formattedTime {
+    final h = timestamp.hour.toString().padLeft(2, '0');
+    final m = timestamp.minute.toString().padLeft(2, '0');
+    final s = timestamp.second.toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  String get formattedDate {
+    final d = timestamp.day.toString().padLeft(2, '0');
+    final mo = timestamp.month.toString().padLeft(2, '0');
+    final y = timestamp.year;
+    return '$d/$mo/$y';
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'timestamp': timestamp.toIso8601String(),
+      'event': event,
+      'message': message,
+      'diagnosis': diagnosis,
+      'macAddress': macAddress,
+      'errorDetail': errorDetail,
+    };
+  }
+
+  factory BluetoothLogEntry.fromJson(Map<String, dynamic> json) {
+    return BluetoothLogEntry(
+      event: json['event'] ?? 'UNKNOWN',
+      message: json['message'] ?? '',
+      diagnosis: json['diagnosis'] ?? 'UNKNOWN',
+      macAddress: json['macAddress'],
+      errorDetail: json['errorDetail'],
+      timestamp: json['timestamp'] != null ? DateTime.tryParse(json['timestamp']) : null,
     );
   }
 }
@@ -230,6 +295,12 @@ class AppState extends ChangeNotifier {
   // Branding variables
   String storeName = "AAHAR SANDWICH & CHINESE";
   String storeGstin = "24ACAPR9698D1Z8";
+  double parcelDeliveryCharge = 40.0;
+  bool isGstInclusive = true;
+  double cartDiscountPercent = 0.0;
+  bool showGstOnBills = true;
+  bool allowDiscounts = true;
+  int defaultGstRate = 5;
 
   // Printer Connection
   bool isPrinterConnected = false;
@@ -240,6 +311,37 @@ class AppState extends ChangeNotifier {
   bool isBluetoothEnabled = true;
   String selectedPrinterType = 'bluetooth'; // 'bluetooth', 'wifi'
   String printerIpAddress = '192.168.1.100';
+
+  // Bluetooth Diagnostic Logs
+  List<BluetoothLogEntry> btLogs = [];
+  static const int _maxBtLogs = 200;
+
+  void addBtLog(String event, String message, String diagnosis, {String? mac, String? error}) {
+    btLogs.insert(0, BluetoothLogEntry(
+      event: event,
+      message: message,
+      diagnosis: diagnosis,
+      macAddress: mac ?? connectedPrinterMac,
+      errorDetail: error,
+    ));
+    if (btLogs.length > _maxBtLogs) {
+      btLogs = btLogs.sublist(0, _maxBtLogs);
+    }
+    debugPrint('[BT-LOG] [$event] $message | Diagnosis: $diagnosis${error != null ? ' | Error: $error' : ''}');
+    notifyListeners();
+
+    // Async push diagnostics logs to Firestore under the license key on important status and error events
+    if (saasLicenseKey.isNotEmpty && (event == 'ERROR' || event == 'CONNECT' || event == 'DISCONNECT' || event == 'SYNC')) {
+      FirestoreService.syncDiagnostics(btLogs, saasLicenseKey).catchError((e) {
+        debugPrint('[Firestore] Error backing up diagnostics log: $e');
+      });
+    }
+  }
+
+  void clearBtLogs() {
+    btLogs.clear();
+    notifyListeners();
+  }
 
   bool get isPrinterReady {
     if (kIsWeb) return true;
@@ -314,6 +416,7 @@ class AppState extends ChangeNotifier {
   String? selectedTableId;
   String currentCategory = 'Sandwich AC';
   String activeView = 'home'; // home, invoices, search, reports-revenue, reports-menu, reports-accounts, etc.
+  List<String> viewHistory = [];
   bool searchBarVisible = false;
   String menuSearchQuery = '';
 
@@ -326,6 +429,21 @@ class AppState extends ChangeNotifier {
   String saasQRCodeUrl = "";
   String saasAnnouncement = "Scan to Pay & Renew";
   String saasSupportPhone = "9979711149";
+  List<String> saasRegisteredDevices = [];
+
+  bool _hasFetchedCloudDb = false;
+  String licenseErrorMessage = '';
+
+  String getOrCreateDeviceId() {
+    String? storedId = LocalStorageHelper.getString('ahar_device_id');
+    if (storedId == null || storedId.isEmpty) {
+      final randomPart = (100000 + Random().nextInt(900000)).toString();
+      final timePart = DateTime.now().microsecondsSinceEpoch.toString();
+      storedId = 'DEV-$timePart-$randomPart';
+      LocalStorageHelper.setString('ahar_device_id', storedId);
+    }
+    return storedId;
+  }
 
   String adminEmail = "admin@aharpos.com";
   bool _didMigrateThisLaunch = false;
@@ -791,12 +909,12 @@ class AppState extends ChangeNotifier {
     // Check SaaS License Activation
     final savedKey = LocalStorageHelper.getString('ahar_license_key');
     if (savedKey == null || savedKey.isEmpty) {
-      saasActivationRequired = false;
-      saasLocked = true;
-      saasTitle = "Checking License...";
-      _tryBackgroundAutoActivation();
+      saasActivationRequired = true;
+      saasLocked = false;
+      saasTitle = "License Required";
     } else {
       saasActivationRequired = false;
+      saasLocked = false;
       saasLicenseKey = savedKey;
       appId = int.tryParse(LocalStorageHelper.getString('ahar_app_id') ?? '104') ?? 104;
     }
@@ -806,6 +924,11 @@ class AppState extends ChangeNotifier {
     // Load store configuration
     storeName = LocalStorageHelper.getString('ahar_store_name') ?? "AAHAR SANDWICH & CHINESE";
     storeGstin = LocalStorageHelper.getString('ahar_store_gstin') ?? "24ACAPR9698D1Z8";
+    parcelDeliveryCharge = double.tryParse(LocalStorageHelper.getString('ahar_parcel_delivery_charge') ?? '') ?? 40.0;
+    isGstInclusive = LocalStorageHelper.getString('ahar_is_gst_inclusive') != 'false';
+    showGstOnBills = LocalStorageHelper.getString('ahar_show_gst_on_bills') != 'false';
+    allowDiscounts = LocalStorageHelper.getString('ahar_allow_discounts') != 'false';
+    defaultGstRate = int.tryParse(LocalStorageHelper.getString('ahar_default_gst_rate') ?? '5') ?? 5;
 
     // Load printer connection status
     isPrinterConnected = LocalStorageHelper.getString('ahar_printer_connected') == 'true';
@@ -944,6 +1067,7 @@ class AppState extends ChangeNotifier {
           menu.removeWhere((item) => item.category == 'Cold Drinks AC');
           menu.addAll(defaultMenu.where((item) => item.category == 'Cold Drinks AC'));
           menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
+          cleanDuplicateMenuItems();
           saveMenu();
       LocalStorageHelper.setString('ahar_menu_version', currentMenuVersion);
       _didMigrateThisLaunch = true;
@@ -974,6 +1098,7 @@ class AppState extends ChangeNotifier {
         menu = List.from(defaultMenu);
       }
       menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
+      cleanDuplicateMenuItems();
     }
 
     // Load active carts
@@ -1019,67 +1144,7 @@ class AppState extends ChangeNotifier {
     final savedTableId = LocalStorageHelper.getString('ahar_selected_table_id');
     selectedTableId = (savedTableId != null && savedTableId.isNotEmpty) ? savedTableId : null;
 
-    // Pre-populate busy tables if empty (matching screenshot layouts)
-    if (activeCarts.isEmpty) {
-      activeCarts["B5"] = [
-        CartItem(id: 1, name: "Toast Sandwich", price: 90, category: "Sandwich AC", qty: 2),
-        CartItem(id: 11, name: "Cheese Grilled Sandwich", price: 150, category: "Grilled AC", qty: 1)
-      ];
-      activeCarts["1B"] = [
-        CartItem(id: 4, name: "Bread Butter", price: 50, category: "Sandwich AC", qty: 2),
-        CartItem(id: 91, name: "Chilli Garlic Noodles", price: 190, category: "Noodles AC", qty: 1)
-      ];
-      activeCarts["PARCEL 5"] = [
-        CartItem(id: 20, name: "Margherita Pizza", price: 210, category: "Pizza AC", qty: 1),
-        CartItem(id: 8, name: "Bread Butter Toast Sandwich", price: 80, category: "Sandwich AC", qty: 1)
-      ];
-      // Set initial occupied times for pre-populated tables (e.g. 12, 42, 21 mins ago)
-      final now = DateTime.now();
-      tableOccupiedTimes["B5"] = now.subtract(const Duration(minutes: 12)).toIso8601String();
-      tableOccupiedTimes["1B"] = now.subtract(const Duration(minutes: 42)).toIso8601String();
-      tableOccupiedTimes["PARCEL 5"] = now.subtract(const Duration(minutes: 21)).toIso8601String();
-      saveCarts();
-    }
-
-    // Fill in missing occupied times for any existing carts (e.g. if loaded from storage but missing times)
-    activeCarts.forEach((tableId, cart) {
-      if (cart.isNotEmpty && !tableOccupiedTimes.containsKey(tableId)) {
-        tableOccupiedTimes[tableId] = DateTime.now().toIso8601String();
-      }
-    });
-
-    // Pre-populate sample invoices to display charts on initial load
-    if (invoices.isEmpty) {
-      invoices = [
-        InvoiceModel(
-          id: "INV-968412",
-          tableId: "A2",
-          dateTime: "09/06/2026, 12:44:00 PM",
-          items: [
-            CartItem(id: 1, name: "Toast Sandwich", price: 90, category: "Sandwich AC", qty: 2),
-            CartItem(id: 4, name: "Bread Butter", price: 50, category: "Sandwich AC", qty: 1)
-          ],
-          subtotal: 230,
-          gst: 12,
-          packaging: 40,
-          total: 282,
-        ),
-        InvoiceModel(
-          id: "INV-238415",
-          tableId: "C3",
-          dateTime: "09/06/2026, 02:15:32 PM",
-          items: [
-            CartItem(id: 20, name: "Margherita Pizza", price: 210, category: "Pizza AC", qty: 2),
-            CartItem(id: 30, name: "Paneer Butter Masala", price: 280, category: "Paneer Sp AC", qty: 1)
-          ],
-          subtotal: 700,
-          gst: 35,
-          packaging: 40,
-          total: 775,
-        ),
-      ];
-      enforceSequentialInvoiceIds();
-    }
+    // Pre-population of busy tables and sample invoices has been removed to start with a clean state.
 
     // Initialize SaaS checking and setup poller to catch command center changes in browser window (every 15 seconds to avoid UI thread lag)
     checkSaaSStatus();
@@ -1087,14 +1152,17 @@ class AppState extends ChangeNotifier {
       checkSaaSStatus();
     });
 
-    // Try to fetch DB from cloud immediately on startup
+    // Try to fetch DB and settings from cloud immediately on startup
     fetchSaaSDatabaseFromCloud().then((_) {
-      checkSaaSStatus();
-      updateHeartbeatOnCloud();
+      fetchSaaSGlobalSettingsFromCloud().then((_) {
+        checkSaaSStatus();
+        updateHeartbeatOnCloud();
+      });
     });
 
     // Setup cloud sync timer (every 3 minutes to optimize network requests and database read/write limits)
     _cloudSyncTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
+      fetchSaaSGlobalSettingsFromCloud();
       updateHeartbeatOnCloud();
     });
 
@@ -1111,21 +1179,6 @@ class AppState extends ChangeNotifier {
     }
     _startInternetCheckTimer();
     notifyListeners();
-  }
-
-  Future<void> _tryBackgroundAutoActivation() async {
-    const defaultKey = 'LIC-AHAR-FOOD-2026';
-    final success = await activateWithLicenseKey(defaultKey);
-    if (success) {
-      saasActivationRequired = false;
-      saasLocked = false;
-      notifyListeners();
-    } else {
-      saasActivationRequired = true;
-      saasLocked = true;
-      saasTitle = "License Required";
-      notifyListeners();
-    }
   }
 
   @override
@@ -1152,6 +1205,7 @@ class AppState extends ChangeNotifier {
             await FirestoreService.syncMenu(menu, saasLicenseKey);
           } else {
             menu = List<MenuItem>.from(cloudData['menu']);
+            cleanDuplicateMenuItems();
             LocalStorageHelper.setString('ahar_menu_items', jsonEncode(menu.map((m) => m.toJson()).toList()));
           }
         }
@@ -1167,13 +1221,68 @@ class AppState extends ChangeNotifier {
           invoices = List<InvoiceModel>.from(cloudData['invoices']);
           LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
         }
+        if (cloudData.containsKey('activeCarts')) {
+          activeCarts = Map<String, List<CartItem>>.from(cloudData['activeCarts']);
+          final rawMap = activeCarts.map((key, value) => MapEntry(key, value.map((i) => i.toJson()).toList()));
+          LocalStorageHelper.setString('ahar_active_carts', jsonEncode(rawMap));
+        }
+        if (cloudData.containsKey('tableOccupiedTimes')) {
+          tableOccupiedTimes = Map<String, String>.from(cloudData['tableOccupiedTimes']);
+          LocalStorageHelper.setString('ahar_table_occupied_times', jsonEncode(tableOccupiedTimes));
+        }
         cloudStatus = 'connected';
         invalidateCache();
         notifyListeners();
         debugPrint('[Firestore] Successfully synced data from cloud for license key $saasLicenseKey');
+      } else {
+        cloudStatus = 'connected';
+        notifyListeners();
+        debugPrint('[Firestore] Cloud pull returned empty data (data is 0 or deleted).');
       }
     } catch (e) {
       debugPrint('[Firestore] Error syncing data from cloud: $e');
+      cloudStatus = 'offline';
+      notifyListeners();
+    }
+  }
+
+  Future<void> pushLocalDataToCloud() async {
+    if (saasLicenseKey.isEmpty) return;
+    cloudStatus = 'syncing';
+    notifyListeners();
+    try {
+      await FirestoreService.syncTables(
+        tables,
+        saasLicenseKey,
+        activeCarts: activeCarts,
+        tableOccupiedTimes: tableOccupiedTimes,
+      );
+      await FirestoreService.syncMenu(menu, saasLicenseKey);
+      await FirestoreService.syncCategories(categories, saasLicenseKey);
+      await FirestoreService.syncInvoices(invoices, saasLicenseKey);
+      await FirestoreService.syncDiagnostics(btLogs, saasLicenseKey);
+      cloudStatus = 'connected';
+      notifyListeners();
+      debugPrint('[Firestore] Successfully pushed all local data to cloud.');
+    } catch (e) {
+      debugPrint('[Firestore] Error pushing local data to cloud: $e');
+      cloudStatus = 'offline';
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchSaaSGlobalSettingsFromCloud() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('saas_data').doc('global_settings').get().timeout(const Duration(seconds: 4));
+      if (snap.exists) {
+        final settingsJson = snap.data()?['settingsJson'] as String?;
+        if (settingsJson != null && settingsJson.isNotEmpty) {
+          await LocalStorageHelper.setString('saas_global_settings', settingsJson);
+          debugPrint('[DEBUG] SaaS global settings fetched from cloud successfully.');
+        }
+      }
+    } catch (e) {
+      debugPrint('[DEBUG] Error fetching SaaS global settings from cloud: $e');
     }
   }
 
@@ -1183,7 +1292,7 @@ class AppState extends ChangeNotifier {
     cloudStatus = 'syncing';
     notifyListeners();
     try {
-      final snap = await FirebaseFirestore.instance.collection('saas_data').doc('central_db').get();
+      final snap = await FirebaseFirestore.instance.collection('saas_data').doc('central_db').get().timeout(const Duration(seconds: 4));
       if (snap.exists) {
         final dbJson = snap.data()?['dbJson'] as String?;
         if (dbJson != null && dbJson.isNotEmpty) {
@@ -1194,6 +1303,7 @@ class AppState extends ChangeNotifier {
               decoded.containsKey('customers') &&
               decoded.containsKey('applications')) {
             cloudStatus = 'connected';
+            _hasFetchedCloudDb = true;
             notifyListeners();
             return decoded;
           }
@@ -1223,6 +1333,7 @@ class AppState extends ChangeNotifier {
         };
         await saveSaaSDatabaseToCloud(defaultDbMap);
         cloudStatus = 'connected';
+        _hasFetchedCloudDb = true;
         notifyListeners();
         return defaultDbMap;
       }
@@ -1240,7 +1351,7 @@ class AppState extends ChangeNotifier {
     try {
       await FirebaseFirestore.instance.collection('saas_data').doc('central_db').set({
         'dbJson': jsonEncode(dbObj)
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
       await LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObj));
       cloudStatus = 'connected';
       notifyListeners();
@@ -1283,6 +1394,10 @@ class AppState extends ChangeNotifier {
             final expiry = l['expiryDate'] ?? DateTime.now().add(const Duration(days: 30)).toIso8601String();
             final rate = l['rate'] ?? 1200;
             final isRejected = l['paymentRejected'] == true;
+            final cloudLimit = l['cloudInvoicesLimit'] ?? 100;
+            if (cloudInvoicesLimit != cloudLimit) {
+              updateCloudInvoicesLimit(cloudLimit);
+            }
             
             String statusVal = isActive ? 'active' : 'paused';
             final List pendingRenewals = dbObj['pendingRenewals'] ?? [];
@@ -1324,7 +1439,7 @@ class AppState extends ChangeNotifier {
     final savedKey = LocalStorageHelper.getString('ahar_license_key');
     if (savedKey == null || savedKey.isEmpty) {
       saasActivationRequired = true;
-      saasLocked = true;
+      saasLocked = false;
       notifyListeners();
       return;
     }
@@ -1396,14 +1511,51 @@ class AppState extends ChangeNotifier {
         }
         
         if (foundLicense == null || (foundLicense['appId'] ?? 104) != 104) {
-          if (cloudStatus == 'connected') {
+          if (_hasFetchedCloudDb) {
             deactivateApp();
           } else {
-            saasLocked = true;
-            saasTitle = "License Verification Failed";
-            notifyListeners();
+            debugPrint('[DEBUG] License key not found in local db cache on startup. Waiting for Firestore sync...');
           }
           return;
+        }
+
+        final List<dynamic> devicesList = foundLicense['devices'] != null
+            ? List.from(foundLicense['devices'])
+            : [];
+        saasRegisteredDevices = devicesList.map((d) => d.toString()).toList();
+
+        final cloudLimit = foundLicense['cloudInvoicesLimit'] ?? 100;
+        if (cloudInvoicesLimit != cloudLimit) {
+          updateCloudInvoicesLimit(cloudLimit);
+        }
+
+        // Verify device ID if cloud DB has been fetched
+        if (_hasFetchedCloudDb) {
+          final currentDevId = getOrCreateDeviceId();
+          final List<dynamic> devices = foundLicense['devices'] != null
+              ? List.from(foundLicense['devices'])
+              : [];
+          if (!devices.contains(currentDevId)) {
+            final deviceLimit = foundLicense['deviceLimit'] ?? 2;
+            if (devices.length < deviceLimit) {
+              // Auto-register current device if under limit
+              devices.add(currentDevId);
+              foundLicense['devices'] = devices;
+              saveSaaSDatabaseToCloud(dbObj).then((success) {
+                if (success) {
+                  debugPrint('[DEBUG] checkSaaSStatus: Auto-registered device ID ($currentDevId) on cloud.');
+                }
+              });
+            } else {
+              // Exceeds limit - Lock SaaS instead of deactivating local app settings
+              debugPrint('[DEBUG] checkSaaSStatus: Device ID ($currentDevId) is not registered and limit ($deviceLimit) reached.');
+              saasLocked = true;
+              saasTitle = "Device Limit Exceeded";
+              saasAnnouncement = "Limit is $deviceLimit devices. Contact Admin.";
+              notifyListeners();
+              return;
+            }
+          }
         }
       } catch (_) {}
     }
@@ -1495,8 +1647,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<bool> activateWithLicenseKey(String key) async {
-    debugPrint('[DEBUG] activateWithLicenseKey: entered key = "$key"');
+  Future<bool> activateWithLicenseKey(String key, {String? ownerPin, String? ownerName}) async {
+    licenseErrorMessage = '';
+    debugPrint('[DEBUG] activateWithLicenseKey: entered key = "$key", pin = "$ownerPin", name = "$ownerName"');
     
     // Fetch latest DB from cloud first
     final dbObj = await fetchSaaSDatabaseFromCloud();
@@ -1586,7 +1739,71 @@ class AppState extends ChangeNotifier {
         debugPrint('[DEBUG] Found key matches license! targetAppId = $targetAppId');
         if (targetAppId != 104) {
           debugPrint('[DEBUG] Strict Security Block: targetAppId ($targetAppId) != 104. Rejecting!');
+          licenseErrorMessage = 'Invalid App ID for this license.';
           return false;
+        }
+
+        // --- DEVICE VERIFICATION CHECK (MAX 2 DEVICES OR CUSTOM LIMIT) ---
+        final currentDevId = getOrCreateDeviceId();
+        final List<dynamic> devices = foundLicense['devices'] != null
+            ? List.from(foundLicense['devices'])
+            : [];
+        final deviceLimit = foundLicense['deviceLimit'] ?? 2;
+        
+        bool dbChanged = false;
+        if (!devices.contains(currentDevId)) {
+          if (devices.length >= deviceLimit) {
+            debugPrint('[DEBUG] Activation failed: Device limit reached.');
+            licenseErrorMessage = 'This license key is already active on $deviceLimit other devices.\nPlease contact your administrator.';
+            return false;
+          }
+          // Register the current device
+          devices.add(currentDevId);
+          foundLicense['devices'] = devices;
+          dbChanged = true;
+        }
+
+        if (ownerPin != null && ownerPin.length == 4) {
+          final ownerIdx = users.indexWhere((u) => u.role == 'owner');
+          if (ownerIdx != -1) {
+            final String nameToUse = ownerName != null && ownerName.isNotEmpty ? "$ownerName (Owner)" : users[ownerIdx].name;
+            users[ownerIdx] = UserProfile(name: nameToUse, pin: ownerPin, role: users[ownerIdx].role);
+            final jsonStr = jsonEncode(users.map((u) => u.toJson()).toList());
+            LocalStorageHelper.setString('ahar_users', jsonStr);
+            if (loggedInUser != null && loggedInUser!.role == 'owner') {
+              loggedInUser = users[ownerIdx];
+            }
+          }
+          
+          final pins = foundLicense['pins'] != null ? Map<String, dynamic>.from(foundLicense['pins']) : {};
+          final newPinObj = {
+            'pin': ownerPin,
+            'name': ownerName ?? '',
+          };
+          
+          bool pinObjChanged = true;
+          if (pins[currentDevId] != null && pins[currentDevId] is Map) {
+            final existing = pins[currentDevId] as Map;
+            if (existing['pin'] == ownerPin && existing['name'] == ownerName) {
+              pinObjChanged = false;
+            }
+          }
+          
+          if (pinObjChanged) {
+            pins[currentDevId] = newPinObj;
+            foundLicense['pins'] = pins;
+            dbChanged = true;
+          }
+        }
+
+        if (dbChanged) {
+          // Save the updated central DB back to Firestore
+          final saveSuccess = await saveSaaSDatabaseToCloud(dbObjDecoded);
+          if (!saveSuccess) {
+            debugPrint('[DEBUG] Failed to save database on cloud.');
+            licenseErrorMessage = 'Cloud connection error. Please try again.';
+            return false;
+          }
         }
         appId = targetAppId;
         saasLicenseKey = key;
@@ -1611,6 +1828,7 @@ class AppState extends ChangeNotifier {
 
         // Sync data from cloud for this license key
         await syncDataFromCloud();
+        await fetchSaaSGlobalSettingsFromCloud();
 
         checkSaaSStatus();
         notifyListeners();
@@ -1632,9 +1850,74 @@ class AppState extends ChangeNotifier {
     
     saasLicenseKey = "";
     saasActivationRequired = true;
-    saasLocked = true;
+    saasLocked = false;
+    saasRegisteredDevices = [];
     
     notifyListeners();
+  }
+
+  Future<void> removeDeviceFromLicenseCloud(String deviceId) async {
+    if (saasLicenseKey.isEmpty) return;
+    try {
+      final dbObj = await fetchSaaSDatabaseFromCloud();
+      if (dbObj != null) {
+        final List licensesList = dbObj['licenses'] ?? [];
+        int foundIdx = -1;
+        for (int i = 0; i < licensesList.length; i++) {
+          final l = licensesList[i];
+          if (l is Map && l['key'].toString().trim().toUpperCase() == saasLicenseKey.trim().toUpperCase()) {
+            foundIdx = i;
+            break;
+          }
+        }
+
+        if (foundIdx != -1) {
+          final List devices = List.from(licensesList[foundIdx]['devices'] ?? []);
+          devices.remove(deviceId);
+          licensesList[foundIdx]['devices'] = devices;
+          
+          final success = await saveSaaSDatabaseToCloud(dbObj);
+          if (success) {
+            debugPrint('[DEBUG] Device $deviceId removed successfully from cloud.');
+            await LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObj));
+            checkSaaSStatus();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DEBUG] Error removing device from cloud: $e');
+    }
+  }
+
+  Future<void> clearAllDevicesFromLicenseCloud() async {
+    if (saasLicenseKey.isEmpty) return;
+    try {
+      final dbObj = await fetchSaaSDatabaseFromCloud();
+      if (dbObj != null) {
+        final List licensesList = dbObj['licenses'] ?? [];
+        int foundIdx = -1;
+        for (int i = 0; i < licensesList.length; i++) {
+          final l = licensesList[i];
+          if (l is Map && l['key'].toString().trim().toUpperCase() == saasLicenseKey.trim().toUpperCase()) {
+            foundIdx = i;
+            break;
+          }
+        }
+
+        if (foundIdx != -1) {
+          licensesList[foundIdx]['devices'] = [];
+          
+          final success = await saveSaaSDatabaseToCloud(dbObj);
+          if (success) {
+            debugPrint('[DEBUG] All registered devices cleared successfully from cloud.');
+            await LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObj));
+            checkSaaSStatus();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DEBUG] Error clearing all devices from cloud: $e');
+    }
   }
 
   Future<void> renewLicense() async {
@@ -1715,6 +1998,11 @@ class AppState extends ChangeNotifier {
   void saveStoreNameGstin() {
     LocalStorageHelper.setString('ahar_store_name', storeName);
     LocalStorageHelper.setString('ahar_store_gstin', storeGstin);
+    LocalStorageHelper.setString('ahar_parcel_delivery_charge', parcelDeliveryCharge.toString());
+    LocalStorageHelper.setString('ahar_is_gst_inclusive', isGstInclusive ? 'true' : 'false');
+    LocalStorageHelper.setString('ahar_show_gst_on_bills', showGstOnBills ? 'true' : 'false');
+    LocalStorageHelper.setString('ahar_allow_discounts', allowDiscounts ? 'true' : 'false');
+    LocalStorageHelper.setString('ahar_default_gst_rate', defaultGstRate.toString());
   }
 
   void saveTables() async {
@@ -1722,7 +2010,12 @@ class AppState extends ChangeNotifier {
     cloudStatus = 'syncing';
     notifyListeners();
     try {
-      await FirestoreService.syncTables(tables, saasLicenseKey);
+      await FirestoreService.syncTables(
+        tables,
+        saasLicenseKey,
+        activeCarts: activeCarts,
+        tableOccupiedTimes: tableOccupiedTimes,
+      );
       cloudStatus = 'connected';
     } catch (_) {
       cloudStatus = 'offline';
@@ -1760,6 +2053,14 @@ class AppState extends ChangeNotifier {
     final rawMap = activeCarts.map((key, value) => MapEntry(key, value.map((i) => i.toJson()).toList()));
     LocalStorageHelper.setString('ahar_active_carts', jsonEncode(rawMap));
     LocalStorageHelper.setString('ahar_table_occupied_times', jsonEncode(tableOccupiedTimes));
+    if (saasLicenseKey.isNotEmpty) {
+      FirestoreService.syncTables(
+        tables,
+        saasLicenseKey,
+        activeCarts: activeCarts,
+        tableOccupiedTimes: tableOccupiedTimes,
+      ).catchError((_) {});
+    }
   }
 
   void saveInvoices() async {
@@ -1788,11 +2089,39 @@ class AppState extends ChangeNotifier {
   }
 
   void navigateToView(String viewId) {
-    activeView = viewId;
-    searchBarVisible = false;
-    menuSearchQuery = '';
-    saveNavigationState();
-    notifyListeners();
+    if (activeView != viewId) {
+      if (viewId == 'home') {
+        viewHistory.clear();
+      } else {
+        if (viewHistory.isEmpty || viewHistory.last != activeView) {
+          viewHistory.add(activeView);
+        }
+      }
+      activeView = viewId;
+      searchBarVisible = false;
+      menuSearchQuery = '';
+      saveNavigationState();
+      notifyListeners();
+    }
+  }
+
+  bool goBack() {
+    if (viewHistory.isNotEmpty) {
+      activeView = viewHistory.removeLast();
+      searchBarVisible = false;
+      menuSearchQuery = '';
+      saveNavigationState();
+      notifyListeners();
+      return true;
+    } else if (activeView != 'home') {
+      activeView = 'home';
+      searchBarVisible = false;
+      menuSearchQuery = '';
+      saveNavigationState();
+      notifyListeners();
+      return true;
+    }
+    return false;
   }
 
   void selectTable(String tableId) {
@@ -1808,16 +2137,43 @@ class AppState extends ChangeNotifier {
 
   int get cartCount => activeCart.fold(0, (sum, item) => sum + item.qty);
 
-  int get cartSubtotal => activeCart.fold(0, (sum, item) => sum + (item.price * item.qty));
+  int get cartSubtotal {
+    final discountRatio = 1.0 - (cartDiscountPercent / 100.0);
+    if (!showGstOnBills) {
+      return activeCart.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio).round());
+    }
+    if (isGstInclusive) {
+      return activeCart.fold(0, (sum, item) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+        return sum + (totalItemPrice - gstAmount);
+      });
+    } else {
+      return activeCart.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio).round());
+    }
+  }
 
-  int get cartGst => activeCart.fold(0, (sum, item) => sum + (item.price * item.qty * (item.gstRate / 100)).round());
+  int get cartGst {
+    if (!showGstOnBills) {
+      return 0;
+    }
+    final discountRatio = 1.0 - (cartDiscountPercent / 100.0);
+    if (isGstInclusive) {
+      return activeCart.fold(0, (sum, item) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+      });
+    } else {
+      return activeCart.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round());
+    }
+  }
 
   int get cartDelivery {
     if (cartSubtotal == 0) return 0;
     if (selectedTableId != null) {
       final table = tables.firstWhere((t) => t.id == selectedTableId, orElse: () => TableModel(id: '', type: ''));
       if (table.type == 'parcel') {
-        return _defaultParcelMode == 'delivery' ? 40 : 0;
+        return _defaultParcelMode == 'delivery' ? parcelDeliveryCharge.round() : 0;
       }
     }
     return 0; // tables (dine-in) default to 0 delivery/packaging charge
@@ -1919,16 +2275,32 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now();
     final dateStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
+    // Retrieve occupied check-in time
+    String? checkInStr;
+    final occupiedIso = tableOccupiedTimes[selectedTableId!];
+    if (occupiedIso != null) {
+      final occupiedDt = DateTime.tryParse(occupiedIso);
+      if (occupiedDt != null) {
+        final h = occupiedDt.hour.toString().padLeft(2, '0');
+        final m = occupiedDt.minute.toString().padLeft(2, '0');
+        final s = occupiedDt.second.toString().padLeft(2, '0');
+        final ampm = occupiedDt.hour >= 12 ? 'PM' : 'AM';
+        checkInStr = "${occupiedDt.day.toString().padLeft(2, '0')}/${occupiedDt.month.toString().padLeft(2, '0')}/${occupiedDt.year}, $h:$m:$s $ampm";
+      }
+    }
+
     final newInvoice = InvoiceModel(
       id: tempInvId,
       tableId: selectedTableId!,
       dateTime: dateStr,
+      checkInTime: checkInStr ?? dateStr,
       items: List.from(activeCart),
       subtotal: sub,
       gst: tax,
       packaging: del,
       total: tot,
       originalTotal: tot,
+      discountPercent: cartDiscountPercent,
     );
 
     invoices.insert(0, newInvoice);
@@ -1936,6 +2308,7 @@ class AppState extends ChangeNotifier {
 
     final finalInvId = invoices.isNotEmpty ? invoices[0].id : tempInvId;
 
+    cartDiscountPercent = 0.0;
     activeCarts.remove(selectedTableId);
     tableOccupiedTimes.remove(selectedTableId);
     saveCarts();
@@ -1947,6 +2320,7 @@ class AppState extends ChangeNotifier {
 
     selectedTableId = null;
     activeView = 'home';
+    viewHistory.clear();
     saveNavigationState();
     invalidateCache();
     notifyListeners();
@@ -2048,9 +2422,28 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void saveStoreSettings(String name, String gstin) {
+  void toggleGstInclusive(bool value) {
+    isGstInclusive = value;
+    LocalStorageHelper.setString('ahar_is_gst_inclusive', value ? 'true' : 'false');
+    notifyListeners();
+  }
+
+  void updateCartDiscount(double percent) {
+    cartDiscountPercent = percent;
+    notifyListeners();
+  }
+
+  void saveStoreSettings(String name, String gstin, double charge, bool gstInclusive, bool showGst, bool discountsAllowed, int defaultGst) {
     storeName = name;
     storeGstin = gstin;
+    parcelDeliveryCharge = charge;
+    isGstInclusive = gstInclusive;
+    showGstOnBills = showGst;
+    allowDiscounts = discountsAllowed;
+    defaultGstRate = defaultGst;
+    if (!allowDiscounts) {
+      cartDiscountPercent = 0.0;
+    }
     saveStoreNameGstin();
     notifyListeners();
   }
@@ -2080,6 +2473,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> scanForPrinters() async {
     if (kIsWeb) return;
+    addBtLog('SCAN', 'Scanning for paired Bluetooth devices...', 'APP_SIDE');
     isBtScanning = true;
     availablePrinters = [];
     notifyListeners();
@@ -2090,9 +2484,14 @@ class AppState extends ChangeNotifier {
       } catch (_) {
         isBluetoothEnabled = true;
       }
+      if (!isBluetoothEnabled) {
+        addBtLog('SCAN', 'Bluetooth is turned OFF on this device. Please enable Bluetooth from system settings.', 'MACHINE_SIDE');
+      }
       final List<BluetoothInfo> list = await PrintBluetoothThermal.pairedBluetooths;
       availablePrinters = list;
+      addBtLog('SCAN', 'Scan complete. Found ${list.length} paired device(s).', 'APP_SIDE');
     } catch (e) {
+      addBtLog('SCAN', 'Failed to scan for Bluetooth devices.', 'MACHINE_SIDE', error: e.toString());
       debugPrint("Error scanning for Bluetooth printers: $e");
     } finally {
       isBtScanning = false;
@@ -2100,7 +2499,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<bool> connectToBluetoothPrinter(String macAddress, String name) async {
+  Future<bool> connectToBluetoothPrinter(String macAddress, String name, {int maxRetries = 3}) async {
     if (kIsWeb) {
       isPrinterConnected = true;
       connectedPrinterMac = macAddress;
@@ -2108,10 +2507,12 @@ class AppState extends ChangeNotifier {
       LocalStorageHelper.setString('ahar_printer_connected', 'true');
       LocalStorageHelper.setString('ahar_connected_printer_mac', macAddress);
       LocalStorageHelper.setString('ahar_connected_printer_name', name);
+      addBtLog('CONNECT', 'Web mode: Simulated connection to $name ($macAddress).', 'APP_SIDE', mac: macAddress);
       notifyListeners();
       return true;
     }
 
+    addBtLog('CONNECT', 'Attempting to connect to "$name" ($macAddress) with $maxRetries max retries...', 'APP_SIDE', mac: macAddress);
     isBtScanning = true;
     notifyListeners();
 
@@ -2121,23 +2522,50 @@ class AppState extends ChangeNotifier {
       } catch (_) {
         isBluetoothEnabled = true;
       }
-      try {
-        await PrintBluetoothThermal.disconnect;
-      } catch (_) {}
-      final bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
-      isPrinterConnected = connected;
-      if (connected) {
-        connectedPrinterMac = macAddress;
-        connectedPrinterName = name;
-        LocalStorageHelper.setString('ahar_printer_connected', 'true');
-        LocalStorageHelper.setString('ahar_connected_printer_mac', macAddress);
-        LocalStorageHelper.setString('ahar_connected_printer_name', name);
-      } else {
-        LocalStorageHelper.setString('ahar_printer_connected', 'false');
+
+      if (!isBluetoothEnabled) {
+        addBtLog('CONNECT', 'FAILED: Bluetooth is OFF on this device. Cannot connect to printer.', 'MACHINE_SIDE', mac: macAddress);
       }
-      return connected;
+
+      // Retry loop for flaky BT connections (e.g. BPT-10077650)
+      for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Always cleanly disconnect before reconnecting
+          try {
+            await PrintBluetoothThermal.disconnect;
+          } catch (_) {}
+
+          // Small delay between disconnect and reconnect for BT stack stability
+          if (attempt > 1) {
+            addBtLog('RETRY', 'Retry attempt $attempt/$maxRetries after ${500 * attempt}ms delay...', 'APP_SIDE', mac: macAddress);
+            await Future.delayed(Duration(milliseconds: 500 * attempt));
+          }
+
+          final bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+          if (connected) {
+            isPrinterConnected = true;
+            connectedPrinterMac = macAddress;
+            connectedPrinterName = name;
+            LocalStorageHelper.setString('ahar_printer_connected', 'true');
+            LocalStorageHelper.setString('ahar_connected_printer_mac', macAddress);
+            LocalStorageHelper.setString('ahar_connected_printer_name', name);
+            addBtLog('CONNECT', 'SUCCESS: Connected to "$name" ($macAddress) on attempt $attempt.', 'APP_SIDE', mac: macAddress);
+            return true;
+          }
+
+          addBtLog('CONNECT', 'Attempt $attempt/$maxRetries failed. Printer did not accept connection. Check if printer is ON and in range.', 'MACHINE_SIDE', mac: macAddress);
+        } catch (e) {
+          addBtLog('ERROR', 'Attempt $attempt/$maxRetries threw error. Possibly printer is busy, out of range, or BT stack crashed.', 'MACHINE_SIDE', mac: macAddress, error: e.toString());
+        }
+      }
+
+      // All retries failed
+      addBtLog('CONNECT', 'FAILED: All $maxRetries connection attempts failed for "$name" ($macAddress). Printer may be OFF, out of range, or paired with another device.', 'MACHINE_SIDE', mac: macAddress);
+      isPrinterConnected = false;
+      LocalStorageHelper.setString('ahar_printer_connected', 'false');
+      return false;
     } catch (e) {
-      debugPrint("Error connecting to Bluetooth printer: $e");
+      addBtLog('ERROR', 'Critical error during connection to "$name" ($macAddress). App-side Bluetooth stack error.', 'APP_SIDE', mac: macAddress, error: e.toString());
       isPrinterConnected = false;
       LocalStorageHelper.setString('ahar_printer_connected', 'false');
       return false;
@@ -2149,6 +2577,7 @@ class AppState extends ChangeNotifier {
 
 
   Future<void> disconnectFromBluetoothPrinter() async {
+    addBtLog('DISCONNECT', 'User requested disconnect from "$connectedPrinterName" ($connectedPrinterMac).', 'APP_SIDE');
     isPrinterConnected = false;
     LocalStorageHelper.setString('ahar_printer_connected', 'false');
     notifyListeners();
@@ -2156,23 +2585,93 @@ class AppState extends ChangeNotifier {
     if (!kIsWeb) {
       try {
         await PrintBluetoothThermal.disconnect;
+        addBtLog('DISCONNECT', 'Successfully disconnected from Bluetooth printer.', 'APP_SIDE');
       } catch (e) {
+        addBtLog('ERROR', 'Error while disconnecting. BT stack may be in an unstable state.', 'APP_SIDE', error: e.toString());
         debugPrint("Error disconnecting from Bluetooth printer: $e");
       }
     }
   }
 
-  void togglePrinterConnection(bool connected) {
+  Future<void> togglePrinterConnection(bool connected) async {
+    addBtLog('TOGGLE', 'User toggled printer switch to ${connected ? 'ON' : 'OFF'}.', 'APP_SIDE');
     if (connected) {
       if (connectedPrinterMac.isNotEmpty) {
-        connectToBluetoothPrinter(connectedPrinterMac, connectedPrinterName);
+        // Await the connection so the toggle reflects the true result
+        final success = await connectToBluetoothPrinter(connectedPrinterMac, connectedPrinterName);
+        // If connection failed, ensure toggle stays OFF (not stuck)
+        if (!success) {
+          addBtLog('TOGGLE', 'Toggle ON failed: Could not connect. Toggle reset to OFF. Check if printer is ON and in range.', 'MACHINE_SIDE');
+          isPrinterConnected = false;
+          LocalStorageHelper.setString('ahar_printer_connected', 'false');
+          notifyListeners();
+        }
       } else {
+        addBtLog('TOGGLE', 'No printer MAC saved. Please detect and select a printer first.', 'APP_SIDE');
         isPrinterConnected = true;
         LocalStorageHelper.setString('ahar_printer_connected', 'true');
         notifyListeners();
       }
     } else {
       disconnectFromBluetoothPrinter();
+    }
+  }
+
+  /// Ensures BT printer is connected before printing.
+  /// If disconnected, automatically tries to reconnect.
+  /// Returns true if connected and ready to print.
+  Future<bool> ensureBluetoothConnection() async {
+    if (kIsWeb) return true;
+    if (selectedPrinterType == 'wifi') return true;
+
+    try {
+      final bool isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (isConnected) {
+        // Sync state in case it drifted
+        if (!isPrinterConnected) {
+          addBtLog('SYNC', 'Connection state synced: Hardware says connected, but app thought disconnected. State corrected.', 'APP_SIDE');
+          isPrinterConnected = true;
+          notifyListeners();
+        }
+        return true;
+      }
+    } catch (_) {
+      addBtLog('ERROR', 'Could not check BT hardware connection status. BT stack may be unresponsive.', 'APP_SIDE');
+    }
+
+    // Not connected - try auto-reconnect if we have a saved MAC
+    if (connectedPrinterMac.isNotEmpty) {
+      addBtLog('AUTO_RECONNECT', 'Printer found disconnected before print. Auto-reconnecting to "$connectedPrinterName" ($connectedPrinterMac)...', 'MACHINE_SIDE');
+      return await connectToBluetoothPrinter(connectedPrinterMac, connectedPrinterName, maxRetries: 3);
+    }
+
+    // No saved printer to reconnect to
+    addBtLog('ERROR', 'No saved printer MAC address. Cannot auto-reconnect. Please select a printer from Detect Printer.', 'APP_SIDE');
+    isPrinterConnected = false;
+    notifyListeners();
+    return false;
+  }
+
+  /// Syncs the in-memory isPrinterConnected state with actual BT hardware status.
+  /// Call this periodically or before critical operations.
+  Future<void> syncBluetoothConnectionState() async {
+    if (kIsWeb || selectedPrinterType == 'wifi') return;
+
+    try {
+      final bool actuallyConnected = await PrintBluetoothThermal.connectionStatus;
+      if (isPrinterConnected != actuallyConnected) {
+        if (actuallyConnected) {
+          addBtLog('SYNC', 'State mismatch detected: Printer is actually CONNECTED but app showed disconnected. Corrected.', 'APP_SIDE');
+        } else {
+          addBtLog('SYNC', 'State mismatch detected: Printer is actually DISCONNECTED but app showed connected. Printer may have gone out of range, turned OFF, or lost power.', 'MACHINE_SIDE');
+        }
+        isPrinterConnected = actuallyConnected;
+        LocalStorageHelper.setString('ahar_printer_connected', actuallyConnected ? 'true' : 'false');
+        notifyListeners();
+      }
+    } catch (e) {
+      addBtLog('ERROR', 'Failed to sync BT connection state with hardware. BT adapter may be unresponsive.', 'APP_SIDE', error: e.toString());
+      debugPrint('Error syncing BT state: $e');
     }
   }
 
@@ -2636,6 +3135,7 @@ class AppState extends ChangeNotifier {
     
     selectedTableId = null;
     activeView = 'home';
+    viewHistory.clear();
     saveNavigationState();
     invalidateCache();
     notifyListeners();
@@ -2648,6 +3148,76 @@ class AppState extends ChangeNotifier {
       await FirestoreService.syncMenu(menu, saasLicenseKey);
     }
     notifyListeners();
+  }
+
+  Future<void> clearSalesReportsAndSync() async {
+    invoices.clear();
+    activeCarts.clear();
+    tableOccupiedTimes.clear();
+    saveInvoices();
+    saveCarts();
+    invalidateCache();
+
+    if (saasLicenseKey.isNotEmpty) {
+      try {
+        final collectionRef = FirebaseFirestore.instance
+            .collection('licenses')
+            .doc(saasLicenseKey)
+            .collection('invoices');
+        final snapshots = await collectionRef.get().timeout(const Duration(seconds: 4));
+        final batch = FirebaseFirestore.instance.batch();
+        for (var doc in snapshots.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit().timeout(const Duration(seconds: 4));
+
+        // Also update tables on Firestore to set occupied = false
+        await FirestoreService.syncTables(tables, saasLicenseKey, activeCarts: {}, tableOccupiedTimes: {});
+        debugPrint('[Firestore] Invoices and active carts cleared on cloud.');
+      } catch (e) {
+        debugPrint('[Firestore] Error clearing invoices on cloud: $e');
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Removes duplicate menu items by case-insensitive name comparison.
+  /// Keeps the first occurrence and deletes duplicates from memory and Firestore.
+  void cleanDuplicateMenuItems() {
+    final Set<String> seenNames = {};
+    final List<MenuItem> duplicates = [];
+
+    final List<MenuItem> uniqueMenu = [];
+    for (final item in menu) {
+      final lowerName = item.name.trim().toLowerCase();
+      if (seenNames.contains(lowerName)) {
+        duplicates.add(item);
+      } else {
+        seenNames.add(lowerName);
+        uniqueMenu.add(item);
+      }
+    }
+
+    if (duplicates.isNotEmpty) {
+      debugPrint('[Cleanup] Found ${duplicates.length} duplicate menu items:');
+      for (final dup in duplicates) {
+        debugPrint('  - Removing duplicate: "${dup.name}" (id: ${dup.id}, category: ${dup.category})');
+        // Delete from Firestore cloud
+        if (saasLicenseKey.isNotEmpty) {
+          FirebaseFirestore.instance
+              .collection('licenses')
+              .doc(saasLicenseKey)
+              .collection('menu_items')
+              .doc(dup.id.toString())
+              .delete()
+              .catchError((e) {
+            debugPrint('[Cleanup] Error deleting dup doc ${dup.id} from Firestore: $e');
+          });
+        }
+      }
+      menu = uniqueMenu;
+      debugPrint('[Cleanup] Menu cleaned. ${menu.length} unique items remain.');
+    }
   }
 
   void _startInternetCheckTimer() {
@@ -2757,9 +3327,16 @@ class AppState extends ChangeNotifier {
     saveInvoices();
   }
 
-  void deleteInvoice(String id) {
-    invoices.removeWhere((inv) => inv.id == id);
-    enforceSequentialInvoiceIds();
+  bool deleteInvoice(String id) {
+    if (invoices.isEmpty) return false;
+    // Index 0 in invoices is the newest (most recent) invoice
+    if (invoices.first.id != id) {
+      return false; // Can only delete the last invoice to maintain sequence integrity
+    }
+    invoices.removeAt(0);
+    saveInvoices();
+    notifyListeners();
+    return true;
   }
 
   void updateInvoice(InvoiceModel updatedInvoice) {
@@ -2801,9 +3378,36 @@ class AppState extends ChangeNotifier {
         gstRate: item.gstRate,
       )).toList();
 
-      int subtotal = adjustedItems.fold(0, (sum, item) => sum + (item.price * item.qty));
-      int gst = adjustedItems.fold(0, (sum, item) => sum + (item.price * item.qty * (item.gstRate / 100)).round());
-      int total = subtotal + gst + inv.packaging;
+      final discountRatio = 1.0 - (inv.discountPercent / 100.0);
+
+      int subtotal = adjustedItems.fold(0, (sum, item) {
+        if (!showGstOnBills) {
+          return sum + (item.price * item.qty * discountRatio).round();
+        }
+        if (isGstInclusive) {
+          final totalItemPrice = (item.price * item.qty * discountRatio).round();
+          final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+          return sum + (totalItemPrice - gstAmount);
+        } else {
+          return sum + (item.price * item.qty * discountRatio).round();
+        }
+      });
+      int gst = adjustedItems.fold(0, (sum, item) {
+        if (!showGstOnBills) {
+          return 0;
+        }
+        if (isGstInclusive) {
+          final totalItemPrice = (item.price * item.qty * discountRatio).round();
+          return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+        } else {
+          return sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round();
+        }
+      });
+      int total = isGstInclusive
+          ? (showGstOnBills
+              ? adjustedItems.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio).round())
+              : subtotal) + inv.packaging
+          : subtotal + gst + inv.packaging;
 
       bool reduced = true;
       while (total > targetInvTotal && reduced) {
@@ -2828,10 +3432,37 @@ class AppState extends ChangeNotifier {
             adjustedItems.remove(itemToReduce);
             reduced = true;
           }
-          subtotal = adjustedItems.isEmpty ? 0 : adjustedItems.fold(0, (sum, item) => sum + (item.price * item.qty));
-          gst = adjustedItems.isEmpty ? 0 : adjustedItems.fold(0, (sum, item) => sum + (item.price * item.qty * (item.gstRate / 100)).round());
+          subtotal = adjustedItems.isEmpty ? 0 : adjustedItems.fold(0, (sum, item) {
+            if (!showGstOnBills) {
+              return sum + (item.price * item.qty * discountRatio).round();
+            }
+            if (isGstInclusive) {
+              final totalItemPrice = (item.price * item.qty * discountRatio).round();
+              final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+              return sum + (totalItemPrice - gstAmount);
+            } else {
+              return sum + (item.price * item.qty * discountRatio).round();
+            }
+          });
+          gst = adjustedItems.isEmpty ? 0 : adjustedItems.fold(0, (sum, item) {
+            if (!showGstOnBills) {
+              return 0;
+            }
+            if (isGstInclusive) {
+              final totalItemPrice = (item.price * item.qty * discountRatio).round();
+              return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+            } else {
+              return sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round();
+            }
+          });
           final currentPackaging = adjustedItems.isEmpty ? 0 : inv.packaging;
-          total = subtotal + gst + currentPackaging;
+          total = isGstInclusive
+              ? (adjustedItems.isEmpty
+                  ? 0
+                  : (showGstOnBills
+                      ? adjustedItems.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio).round())
+                      : subtotal)) + currentPackaging
+              : subtotal + gst + currentPackaging;
         }
       }
 
@@ -2848,6 +3479,7 @@ class AppState extends ChangeNotifier {
           packaging: adjustedItems.isEmpty ? 0 : inv.packaging,
           total: total,
           originalTotal: origTot,
+          discountPercent: inv.discountPercent,
         );
       }
     }
@@ -2878,6 +3510,7 @@ class AppState extends ChangeNotifier {
               packaging: newPackaging,
               total: newTotal,
               originalTotal: currentInv.originalTotal ?? currentInv.total,
+              discountPercent: currentInv.discountPercent,
             );
             newSum -= deduct;
             if (newSum <= targetTotal) break;
@@ -2913,7 +3546,9 @@ class AppState extends ChangeNotifier {
               
               int bestPrice = 0;
               for (int p = 0; p <= remainingTarget; p++) {
-                final calculatedTotal = p + (p * item.gstRate / 100).round() + currentInv.packaging;
+                final calculatedTotal = isGstInclusive
+                    ? p + currentInv.packaging
+                    : p + (p * item.gstRate / 100).round() + currentInv.packaging;
                 if (calculatedTotal <= remainingTarget) {
                   bestPrice = p;
                 } else {
@@ -2930,9 +3565,17 @@ class AppState extends ChangeNotifier {
                 gstRate: item.gstRate,
               );
 
-              final subtotal = bestPrice;
-              final gst = (bestPrice * (item.gstRate / 100)).round();
-              final total = subtotal + gst + currentInv.packaging;
+              final subtotal = (!showGstOnBills)
+                  ? bestPrice
+                  : (isGstInclusive
+                      ? bestPrice - (bestPrice * item.gstRate / (100 + item.gstRate)).round()
+                      : bestPrice);
+              final gst = (!showGstOnBills)
+                  ? 0
+                  : (isGstInclusive
+                      ? (bestPrice * item.gstRate / (100 + item.gstRate)).round()
+                      : (bestPrice * (item.gstRate / 100.0)).round());
+              final total = isGstInclusive ? bestPrice + currentInv.packaging : subtotal + gst + currentInv.packaging;
               
               final diff = currentInv.total - total;
               newSum -= diff;
@@ -2947,6 +3590,7 @@ class AppState extends ChangeNotifier {
                 packaging: currentInv.packaging,
                 total: total,
                 originalTotal: currentInv.originalTotal ?? currentInv.total,
+                discountPercent: currentInv.discountPercent,
               );
               break;
             } else {
@@ -2970,6 +3614,7 @@ class AppState extends ChangeNotifier {
                 packaging: 0,
                 total: total,
                 originalTotal: currentInv.originalTotal ?? currentInv.total,
+                discountPercent: currentInv.discountPercent,
               );
             }
           }
@@ -3021,7 +3666,9 @@ class AppState extends ChangeNotifier {
           
           int bestPrice = 0;
           for (int p = 0; p <= targetTotal; p++) {
-            final calculatedTotal = p + (p * menuItem.gstRate / 100).round();
+            final calculatedTotal = isGstInclusive
+                ? p
+                : p + (p * menuItem.gstRate / 100).round();
             if (calculatedTotal <= targetTotal) {
               bestPrice = p;
             } else {
@@ -3029,7 +3676,7 @@ class AppState extends ChangeNotifier {
             }
           }
 
-          final calculatedTotal = bestPrice + (bestPrice * menuItem.gstRate / 100).round();
+          final calculatedTotal = isGstInclusive ? bestPrice : bestPrice + (bestPrice * menuItem.gstRate / 100).round();
           final remDiff = targetTotal - calculatedTotal;
 
           final CartItem item = CartItem(
@@ -3046,8 +3693,12 @@ class AppState extends ChangeNotifier {
             tableId: inv.tableId,
             dateTime: inv.dateTime,
             items: [item],
-            subtotal: bestPrice,
-            gst: (bestPrice * menuItem.gstRate / 100).round(),
+            subtotal: isGstInclusive
+                ? bestPrice - (bestPrice * menuItem.gstRate / (100 + menuItem.gstRate)).round()
+                : bestPrice,
+            gst: isGstInclusive
+                ? (bestPrice * menuItem.gstRate / (100 + menuItem.gstRate)).round()
+                : (bestPrice * menuItem.gstRate / 100).round(),
             packaging: remDiff,
             total: targetTotal,
             originalTotal: inv.originalTotal ?? inv.total,

@@ -487,111 +487,118 @@ class _MainLayoutScaffoldState extends State<MainLayoutScaffold> {
       return CashierLockOverlay(state: state);
     }
 
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: const SidebarDrawer(),
-      body: Row(
-        children: [
-          // On desktop viewports (width > 1100), show persistent sidebar drawer
-          if (MediaQuery.of(context).size.width > 1100)
-            const SizedBox(
-              width: 280,
-              child: SidebarDrawer(isPersistent: true),
+    return PopScope(
+      canPop: state.activeView == 'home' && state.viewHistory.isEmpty,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        state.goBack();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: const SidebarDrawer(),
+        body: Row(
+          children: [
+            // On desktop viewports (width > 1100), show persistent sidebar drawer
+            if (MediaQuery.of(context).size.width > 1100)
+              const SizedBox(
+                width: 280,
+                child: SidebarDrawer(isPersistent: true),
+              ),
+            
+            Expanded(
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      if (!state.hasRealInternet)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withOpacity(0.95),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.wifi_off, color: Colors.white, size: 16),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Real Internet Connection Lost: Sales will be saved locally and synced automatically when connection is restored.',
+                                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (state.isCloudAlmostFull && !state.isCloudFull)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6F24).withOpacity(0.95),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.cloud_queue, color: Colors.white, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Cloud Storage Warning: Your cloud space is ${state.cloudUsagePercentage.toStringAsFixed(1)}% full (${state.invoices.length}/${state.cloudInvoicesLimit}). Please upgrade or clear old invoices.',
+                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (state.isCloudFull)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withOpacity(0.95),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.cloud_off, color: Colors.white, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Cloud Storage Full: Database sync is paused (${state.invoices.length}/${state.cloudInvoicesLimit}). Please clear space or contact admin.',
+                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Expanded(
+                        child: _buildActiveView(context, state),
+                      ),
+                    ],
+                  ),
+                  
+                  // Show Invoice Receipt detail popup overlay if selected
+                  if (state.selectedReceiptInvoice != null)
+                    ReceiptPopupOverlay(invoice: state.selectedReceiptInvoice!),
+                ],
+              ),
             ),
-          
-          Expanded(
-            child: Stack(
-              children: [
-                Column(
-                  children: [
-                    if (!state.hasRealInternet)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444).withOpacity(0.95),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-                          ],
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.wifi_off, color: Colors.white, size: 16),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Real Internet Connection Lost: Sales will be saved locally and synced automatically when connection is restored.',
-                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (state.isCloudAlmostFull && !state.isCloudFull)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF6F24).withOpacity(0.95),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.cloud_queue, color: Colors.white, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Cloud Storage Warning: Your cloud space is ${state.cloudUsagePercentage.toStringAsFixed(1)}% full (${state.invoices.length}/${state.cloudInvoicesLimit}). Please upgrade or clear old invoices.',
-                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (state.isCloudFull)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444).withOpacity(0.95),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.cloud_off, color: Colors.white, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Cloud Storage Full: Database sync is paused (${state.invoices.length}/${state.cloudInvoicesLimit}). Please clear space or contact admin.',
-                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Expanded(
-                      child: _buildActiveView(context, state),
-                    ),
-                  ],
-                ),
-                
-                // Show Invoice Receipt detail popup overlay if selected
-                if (state.selectedReceiptInvoice != null)
-                  ReceiptPopupOverlay(invoice: state.selectedReceiptInvoice!),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -612,6 +619,8 @@ class _MainLayoutScaffoldState extends State<MainLayoutScaffold> {
         return MenuReportView(scaffoldKey: _scaffoldKey);
       case 'reports-accounts':
         return AccountsReportView(scaffoldKey: _scaffoldKey);
+      case 'reports-tables':
+        return TableReportView(scaffoldKey: _scaffoldKey);
       case 'settings-tables':
         return TableSettingsView(scaffoldKey: _scaffoldKey);
       case 'settings-menu':
@@ -632,6 +641,8 @@ class _MainLayoutScaffoldState extends State<MainLayoutScaffold> {
         return InvoiceFilterView(scaffoldKey: _scaffoldKey);
       case 'secret-ledger':
         return SecretLedgerView(scaffoldKey: _scaffoldKey);
+      case 'bt-logs':
+        return BluetoothLogsView(scaffoldKey: _scaffoldKey);
       default:
         return SeatingGridView(scaffoldKey: _scaffoldKey);
     }
@@ -870,12 +881,16 @@ class SaaSActivationScreen extends StatefulWidget {
 
 class _SaaSActivationScreenState extends State<SaaSActivationScreen> {
   final _keyController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _pinController = TextEditingController();
   String _errorMessage = '';
   bool _isLoading = false;
 
   @override
   void dispose() {
     _keyController.dispose();
+    _nameController.dispose();
+    _pinController.dispose();
     super.dispose();
   }
 
@@ -917,7 +932,7 @@ class _SaaSActivationScreenState extends State<SaaSActivationScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    "Please enter your POS license key provided by the administrator to authorize this terminal.",
+                    "Please enter your POS license key and configure the owner credentials to authorize this terminal.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5, height: 1.4),
                   ),
@@ -931,6 +946,31 @@ class _SaaSActivationScreenState extends State<SaaSActivationScreen> {
                       prefixIcon: const Icon(Icons.key),
                     ),
                     textCapitalization: TextCapitalization.characters,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Set Owner Name',
+                      hintText: 'e.g. Rahul Sharma',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.person_outline),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _pinController,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    decoration: InputDecoration(
+                      labelText: 'Set Owner Login PIN (4 Digits)',
+                      hintText: 'e.g. 1234',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      counterText: '',
+                    ),
                   ),
                   if (_errorMessage.isNotEmpty) ...[
                     const SizedBox(height: 16),
@@ -946,9 +986,23 @@ class _SaaSActivationScreenState extends State<SaaSActivationScreen> {
                         ? null
                         : () async {
                             final enteredKey = _keyController.text.trim();
+                            final enteredName = _nameController.text.trim();
+                            final enteredPin = _pinController.text.trim();
                             if (enteredKey.isEmpty) {
                               setState(() {
                                 _errorMessage = 'License Key cannot be empty.';
+                              });
+                              return;
+                            }
+                            if (enteredName.isEmpty) {
+                              setState(() {
+                                _errorMessage = 'Owner Name cannot be empty.';
+                              });
+                              return;
+                            }
+                            if (enteredPin.isEmpty || enteredPin.length != 4 || int.tryParse(enteredPin) == null) {
+                              setState(() {
+                                _errorMessage = 'Please enter a valid 4-digit numeric PIN.';
                               });
                               return;
                             }
@@ -961,11 +1015,17 @@ class _SaaSActivationScreenState extends State<SaaSActivationScreen> {
                             // Simulate network activation delay
                             await Future.delayed(const Duration(milliseconds: 800));
 
-                            final success = await state.activateWithLicenseKey(enteredKey);
+                            final success = await state.activateWithLicenseKey(
+                              enteredKey,
+                              ownerPin: enteredPin,
+                              ownerName: enteredName,
+                            );
                             if (!success) {
                               setState(() {
                                 _isLoading = false;
-                                _errorMessage = 'Invalid Activation License Key.\nPlease contact your administrator.';
+                                _errorMessage = state.licenseErrorMessage.isNotEmpty
+                                    ? state.licenseErrorMessage
+                                    : 'Invalid Activation License Key.\nPlease contact your administrator.';
                               });
                             }
                           },
@@ -1065,6 +1125,7 @@ class SidebarDrawer extends StatelessWidget {
                 ),
                 _buildNavItem(context, state, 'reports-revenue', Icons.show_chart, 'Revenue Report'),
                 _buildNavItem(context, state, 'reports-menu', Icons.restaurant_menu, 'Menu Item Report'),
+                _buildNavItem(context, state, 'reports-tables', Icons.table_bar, 'Table Performance'),
                 _buildNavItem(context, state, 'reports-accounts', Icons.bar_chart, 'Accounts Report'),
                 
                 const Padding(
@@ -1090,6 +1151,35 @@ class SidebarDrawer extends StatelessWidget {
                 ),
                 _buildNavItem(context, state, 'feedback', Icons.comment_outlined, 'Send Feedback'),
 
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+                  child: Text('SESSION', style: TextStyle(fontSize: 10, color: Color(0xFF4B5563), fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListTile(
+                    visualDensity: VisualDensity.compact,
+                    leading: const Icon(Icons.logout, color: Color(0xFFEF4444), size: 20),
+                    title: const Text(
+                      'Logout Shift',
+                      style: TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    onTap: () {
+                      if (!isPersistent) {
+                        Navigator.pop(context);
+                      }
+                      state.logoutUser();
+                    },
+                  ),
+                ),
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
                   child: Text('SUPPORT', style: TextStyle(fontSize: 10, color: Color(0xFF4B5563), fontWeight: FontWeight.bold, letterSpacing: 1.5)),
@@ -1128,7 +1218,12 @@ class SidebarDrawer extends StatelessWidget {
 
           // Branded Footer (filling the blank space at the bottom)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: 16 + MediaQuery.of(context).padding.bottom,
+            ),
             decoration: const BoxDecoration(
               color: Color(0xFF0A0D10),
               border: Border(top: BorderSide(color: Color(0x0CFFFFFF))),
@@ -1190,25 +1285,69 @@ class SidebarDrawer extends StatelessWidget {
     );
   }
 
+  Color _getNavItemColor(String viewId) {
+    switch (viewId) {
+      case 'home':
+      case 'menu':
+        return const Color(0xFF3B82F6); // Blue
+      case 'invoices':
+        return const Color(0xFF10B981); // Emerald
+      case 'search':
+        return const Color(0xFF6366F1); // Indigo
+      case 'reports-revenue':
+        return const Color(0xFFEC4899); // Pink
+      case 'reports-menu':
+        return const Color(0xFFF59E0B); // Amber
+      case 'reports-tables':
+        return const Color(0xFF8B5CF6); // Violet
+      case 'reports-accounts':
+        return const Color(0xFF06B6D4); // Cyan
+      case 'settings-tables':
+        return const Color(0xFF14B8A6); // Teal
+      case 'settings-menu':
+        return const Color(0xFFF97316); // Sunset Orange
+      case 'settings-categories':
+        return const Color(0xFF8B5CF6); // Purple
+      case 'settings-store':
+        return const Color(0xFFD946EF); // Fuchsia
+      case 'settings-device':
+        return const Color(0xFF64748B); // Slate
+      case 'settings-account':
+        return const Color(0xFF84CC16); // Lime
+      case 'settings-advance':
+        return const Color(0xFFEF4444); // Red
+      default:
+        return const Color(0xFFFF6F24); // Orange fallback
+    }
+  }
+
   Widget _buildNavItem(BuildContext context, AppState state, String viewId, IconData icon, String title) {
     final isActive = state.activeView == viewId ||
         (viewId == 'home' && state.activeView == 'menu'); // highlight home if in menu view
+    final activeColor = _getNavItemColor(viewId);
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
+      margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0x19FF6F24) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        gradient: isActive ? LinearGradient(
+          colors: [
+            activeColor.withOpacity(0.18),
+            activeColor.withOpacity(0.06),
+          ],
+        ) : null,
+        borderRadius: BorderRadius.circular(10),
+        border: isActive ? Border.all(color: activeColor.withOpacity(0.25)) : null,
       ),
       child: ListTile(
         visualDensity: VisualDensity.compact,
-        leading: Icon(icon, color: isActive ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8), size: 20),
+        leading: Icon(icon, color: isActive ? activeColor : const Color(0xFF94A3B8), size: 20),
         title: Text(
           title,
           style: TextStyle(
-            color: isActive ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8),
+            color: isActive ? activeColor : const Color(0xFF94A3B8),
             fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
             fontSize: 13.5,
+            letterSpacing: 0.3,
           ),
         ),
         onTap: () {
@@ -1577,18 +1716,26 @@ class _SeatingGridViewState extends State<SeatingGridView> {
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: const RadialGradient(
-                      center: Alignment(0, -0.4),
-                      radius: 0.9,
-                      colors: [Color(0xFF1E2836), Color(0xFF101822)],
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: hasOrder
+                          ? [const Color(0xFF2C1619), const Color(0xFF150D0E)]
+                          : [const Color(0xFF0F2C20), const Color(0xFF0A1510)],
                     ),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: hasOrder ? const Color(0xFFFF4444) : const Color(0xFF00AA4F),
-                      width: 3.5,
+                      color: hasOrder 
+                          ? const Color(0xFFEF4444).withOpacity(0.8) 
+                          : const Color(0xFF10B981).withOpacity(0.8),
+                      width: hasOrder ? 2.0 : 1.5,
                     ),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))
+                    boxShadow: [
+                      BoxShadow(
+                        color: (hasOrder ? const Color(0xFFEF4444) : const Color(0xFF10B981)).withOpacity(hasOrder ? 0.15 : 0.08),
+                        blurRadius: hasOrder ? 10 : 8,
+                        offset: const Offset(0, 4),
+                      )
                     ],
                   ),
                   child: Center(
@@ -1597,22 +1744,36 @@ class _SeatingGridViewState extends State<SeatingGridView> {
                       children: [
                         Text(
                           table.id,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(
+                            fontSize: 15, 
+                            fontWeight: FontWeight.w900, 
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withOpacity(0.5),
+                                offset: const Offset(0, 2),
+                                blurRadius: 4,
+                              )
+                            ]
+                          ),
                         ),
                         if (hasOrder) ...[
                           const SizedBox(height: 4),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0x19FF4444),
-                              borderRadius: BorderRadius.circular(6),
+                              color: const Color(0xFFEF4444).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3), width: 1),
                             ),
                             child: Text(
                               _getOccupiedDurationText(table.id, state),
                               style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFFF4444),
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFFFCA5A5),
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
@@ -1725,6 +1886,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
   @override
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       key: _innerScaffoldKey,
@@ -1739,12 +1901,39 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => state.navigateToView('home'),
         ),
-        title: Text('${state.selectedTableId ?? ''} / Menu', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            if (state.selectedTableId != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)]),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withOpacity(0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                ),
+                child: Text(
+                  state.selectedTableId!,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text('/', style: TextStyle(color: Colors.white38, fontSize: 16)),
+              const SizedBox(width: 8),
+            ],
+            const Text('Menu Catalog', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(
               state.searchBarVisible ? Icons.close : Icons.search,
-              color: state.searchBarVisible ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8),
+              color: state.searchBarVisible ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8),
             ),
             onPressed: () {
               if (state.searchBarVisible) {
@@ -1761,7 +1950,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
             onPressed: () {
               _innerScaffoldKey.currentState?.openEndDrawer();
             },
-            child: const Text('Bill', style: TextStyle(color: Color(0xFFFF6F24), fontWeight: FontWeight.bold, fontSize: 16)),
+            child: const Text('Bill', style: TextStyle(color: Color(0xFF3B82F6), fontWeight: FontWeight.bold, fontSize: 16)),
           ),
           IconButton(
             icon: const Icon(Icons.shopping_bag, color: Color(0xFF94A3B8)),
@@ -1808,7 +1997,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                           onChanged: (val) => state.updateMenuSearch(val),
                         ),
                       ),
-                      
+                    _buildHorizontalCategoriesBar(context, state),
                     // Category name and counter
                     Container(
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
@@ -1847,7 +2036,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                 
                 // Floating category popover selector button
                 Positioned(
-                  bottom: state.cartCount > 0 ? 76 : 24,
+                  bottom: state.cartCount > 0 ? (76 + bottomPadding) : (24 + bottomPadding),
                   right: 24,
                   child: FloatingActionButton.extended(
                     onPressed: () => _showCategoryPopup(context, state),
@@ -1908,7 +2097,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
           maxCrossAxisExtent: 260,
           crossAxisSpacing: 14,
           mainAxisSpacing: 14,
-          childAspectRatio: 1.65,
+          childAspectRatio: 1.25, // Taller cards to prevent text vertical overflow!
         ),
         itemCount: items.length,
         itemBuilder: (context, idx) {
@@ -1917,11 +2106,30 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
           final inCart = cartItem.isNotEmpty;
 
           return Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0x0CFFFFFF)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF1E293B).withOpacity(0.65),
+                  const Color(0xFF0F172A).withOpacity(0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: item.isVeg 
+                    ? const Color(0xFF10B981).withOpacity(0.35) 
+                    : const Color(0xFFEF4444).withOpacity(0.35),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (item.isVeg ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withOpacity(0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1935,7 +2143,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                       height: 14,
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: item.isVeg ? const Color(0xFF00AA4F) : const Color(0xFFEF4444),
+                          color: item.isVeg ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                           width: 1.5,
                         ),
                         borderRadius: BorderRadius.circular(3),
@@ -1943,7 +2151,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                       child: Center(
                         child: CircleAvatar(
                           radius: 3,
-                          backgroundColor: item.isVeg ? const Color(0xFF00AA4F) : const Color(0xFFEF4444),
+                          backgroundColor: item.isVeg ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                         ),
                       ),
                     ),
@@ -1951,7 +2159,12 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                     Expanded(
                       child: Text(
                         item.name,
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 14, 
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.3,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1963,49 +2176,81 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                   children: [
                     Text(
                       '₹${item.price}',
-                      style: const TextStyle(fontSize: 13, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 15, 
+                        color: Color(0xFFFF6F24), 
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                     inCart
                         ? Container(
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(colors: [Color(0xFFFF6F24), Color(0xFFE6550F)]),
-                              borderRadius: BorderRadius.circular(8),
+                              gradient: const LinearGradient(colors: [Color(0xFFFF8540), Color(0xFFFF5200)]),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF6F24).withOpacity(0.3),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.remove, size: 12, color: Colors.white),
                                   constraints: const BoxConstraints(),
-                                  padding: const EdgeInsets.all(2),
+                                  padding: const EdgeInsets.all(4),
                                   onPressed: () => state.updateQty(item.id, -1),
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: Text('${cartItem.first.qty}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  child: Text(
+                                    '${cartItem.first.qty}', 
+                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Colors.white),
+                                  ),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.add, size: 12, color: Colors.white),
                                   constraints: const BoxConstraints(),
-                                  padding: const EdgeInsets.all(2),
+                                  padding: const EdgeInsets.all(4),
                                   onPressed: () => state.addToCart(item),
                                 ),
                               ],
                             ),
                           )
-                        : SizedBox(
-                            height: 28,
-                            child: OutlinedButton(
-                              onPressed: () => state.addToCart(item),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFFFF6F24), width: 1.2),
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFFFF6F24),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                        : Container(
+                            height: 30,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF8540), Color(0xFFFF5200)],
                               ),
-                              child: const Text('ADD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF6F24).withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: ElevatedButton(
+                              onPressed: () => state.addToCart(item),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                'ADD', 
+                                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5, letterSpacing: 0.5),
+                              ),
                             ),
                           ),
                   ],
@@ -2027,11 +2272,30 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
 
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0x0CFFFFFF)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF1E293B).withOpacity(0.65),
+                const Color(0xFF0F172A).withOpacity(0.85),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: item.isVeg 
+                  ? const Color(0xFF10B981).withOpacity(0.35) 
+                  : const Color(0xFFEF4444).withOpacity(0.35),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (item.isVeg ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withOpacity(0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2044,7 +2308,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                       height: 18,
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: item.isVeg ? const Color(0xFF00AA4F) : const Color(0xFFEF4444),
+                          color: item.isVeg ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(4),
@@ -2052,7 +2316,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                       child: Center(
                         child: CircleAvatar(
                           radius: 4,
-                          backgroundColor: item.isVeg ? const Color(0xFF00AA4F) : const Color(0xFFEF4444),
+                          backgroundColor: item.isVeg ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                         ),
                       ),
                     ),
@@ -2061,9 +2325,25 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+                          Text(
+                            item.name, 
+                            style: const TextStyle(
+                              fontSize: 14.5, 
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
                           const SizedBox(height: 2),
-                          Text('₹${item.price}', style: const TextStyle(fontSize: 13, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold)),
+                          Text(
+                            '₹${item.price}', 
+                            style: const TextStyle(
+                              fontSize: 14, 
+                              color: Color(0xFFFF6F24), 
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -2073,10 +2353,17 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
               inCart
                   ? Container(
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFFFF6F24), Color(0xFFE6550F)]),
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: const LinearGradient(colors: [Color(0xFFFF8540), Color(0xFFFF5200)]),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF6F24).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -2088,7 +2375,10 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Text('${cartItem.first.qty}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                            child: Text(
+                              '${cartItem.first.qty}', 
+                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5, color: Colors.white),
+                            ),
                           ),
                           IconButton(
                             icon: const Icon(Icons.add, size: 14, color: Colors.white),
@@ -2099,21 +2389,122 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                         ],
                       ),
                     )
-                  : OutlinedButton(
-                      onPressed: () => state.addToCart(item),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFFF6F24), width: 1.5),
-                        backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFFFF6F24),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+                  : Container(
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF8540), Color(0xFFFF5200)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF6F24).withOpacity(0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
                       ),
-                      child: const Text('ADD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                      child: ElevatedButton(
+                        onPressed: () => state.addToCart(item),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'ADD', 
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, letterSpacing: 0.5),
+                        ),
+                      ),
                     ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildHorizontalCategoriesBar(BuildContext context, AppState state) {
+    return Container(
+      height: 52,
+      margin: const EdgeInsets.only(top: 8),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: state.categoriesList.length,
+        itemBuilder: (context, idx) {
+          final cat = state.categoriesList[idx];
+          final isActive = state.currentCategory == cat && state.menuSearchQuery.isEmpty;
+          final count = state.menu.where((m) => m.category == cat).length;
+
+          return GestureDetector(
+            onTap: () {
+              state.selectCategory(cat);
+              state.updateMenuSearch('');
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                gradient: isActive
+                    ? const LinearGradient(
+                        colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)],
+                      )
+                    : null,
+                color: isActive ? null : const Color(0xFF1E293B).withOpacity(0.4),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isActive
+                      ? const Color(0xFF06B6D4).withOpacity(0.5)
+                      : const Color(0x0CFFFFFF),
+                  width: 1.2,
+                ),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFF06B6D4).withOpacity(0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    cat,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                      fontSize: 12.5,
+                      fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: isActive ? Colors.black26 : Colors.white12,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: isActive ? Colors.white : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -2141,8 +2532,14 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
 
                   return Container(
                     decoration: BoxDecoration(
-                      color: isActive ? const Color(0x14FF6F24) : Colors.transparent,
+                      gradient: isActive ? LinearGradient(
+                        colors: [
+                          const Color(0xFFFF6F24).withOpacity(0.18),
+                          const Color(0xFFE6550F).withOpacity(0.06),
+                        ],
+                      ) : null,
                       borderRadius: BorderRadius.circular(10),
+                      border: isActive ? Border.all(color: const Color(0x2BFF6F24)) : null,
                     ),
                     child: ListTile(
                       title: Text(
@@ -2193,37 +2590,102 @@ class CartBottomActionBar extends StatelessWidget {
 
   const CartBottomActionBar({super.key, required this.itemCount, required this.onInfoTap});
 
+  Widget _buildActionBarButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool highlight = false,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: highlight ? Colors.white.withOpacity(0.25) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Container(
-      height: 54,
-      color: const Color(0xFFD97706),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withOpacity(0.25),
+            blurRadius: 12,
+            offset: const Offset(0, -3),
+          )
+        ],
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 12,
+        top: 8,
+        bottom: 8 + bottomPadding,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            '$itemCount ${itemCount == 1 ? 'Item' : 'Items'}',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+          Row(
+            children: [
+              const Icon(Icons.shopping_cart, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '$itemCount ${itemCount == 1 ? "Item" : "Items"}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
           Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.info_outline, color: Colors.white),
+              _buildActionBarButton(
+                icon: Icons.info_outline,
+                tooltip: 'View Details',
                 onPressed: onInfoTap,
               ),
-              IconButton(
-                icon: const Icon(Icons.search, color: Colors.white),
+              const SizedBox(width: 8),
+              _buildActionBarButton(
+                icon: Icons.search,
+                tooltip: 'Search Menu',
                 onPressed: () => state.toggleMenuSearch(),
               ),
-              IconButton(
-                icon: const Icon(Icons.print, color: Colors.white),
+              const SizedBox(width: 8),
+              _buildActionBarButton(
+                icon: Icons.print,
+                tooltip: 'Print Receipt',
                 onPressed: () => _printMonospacedReceipt(context, state),
               ),
-              IconButton(
-                icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              _buildActionBarButton(
+                icon: Icons.check_circle_outline,
+                tooltip: 'Generate Bill',
                 onPressed: () {
                   state.generateTableBill();
                   if (state.isCloudAlmostFull && !state.shownCloudFullAlert) {
@@ -2231,6 +2693,7 @@ class CartBottomActionBar extends StatelessWidget {
                     _showCloudFullWarningDialog(context, state);
                   }
                 },
+                highlight: true,
               ),
             ],
           ),
@@ -2255,10 +2718,37 @@ class CartBottomActionBar extends StatelessWidget {
     final List<String> lines = [];
     lines.add("========================================");
     lines.add("       ${state.storeName}");
-    lines.add("        GSTIN: ${state.storeGstin}");
+    if (state.storeGstin.isNotEmpty) {
+      lines.add("        GSTIN: ${state.storeGstin}");
+    }
     lines.add("========================================");
+    final occupiedIso = state.tableOccupiedTimes[state.selectedTableId];
+    String? checkInStr;
+    if (occupiedIso != null) {
+      final occupiedDt = DateTime.tryParse(occupiedIso);
+      if (occupiedDt != null) {
+        final h = occupiedDt.hour.toString().padLeft(2, '0');
+        final m = occupiedDt.minute.toString().padLeft(2, '0');
+        final s = occupiedDt.second.toString().padLeft(2, '0');
+        final ampm = occupiedDt.hour >= 12 ? 'PM' : 'AM';
+        checkInStr = "${occupiedDt.day.toString().padLeft(2, '0')}/${occupiedDt.month.toString().padLeft(2, '0')}/${occupiedDt.year}, $h:$m:$s $ampm";
+      }
+    }
+
+    final now = DateTime.now();
+    final hStr = now.hour.toString().padLeft(2, '0');
+    final mStr = now.minute.toString().padLeft(2, '0');
+    final sStr = now.second.toString().padLeft(2, '0');
+    final ampm = now.hour >= 12 ? 'PM' : 'AM';
+    final nowStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, $hStr:$mStr:$sStr $ampm";
+
     lines.add("Table/Parcel: ${state.selectedTableId ?? ''}");
-    lines.add("Date: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}");
+    if (checkInStr != null) {
+      lines.add("Check-In:  $checkInStr");
+      lines.add("Check-Out: $nowStr");
+    } else {
+      lines.add("Date: $nowStr");
+    }
     lines.add("========================================");
     lines.add("ITEMS:");
     
@@ -2270,9 +2760,24 @@ class CartBottomActionBar extends StatelessWidget {
     }
     
     lines.add("========================================");
+    final rawItemTotal = state.activeCart.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+    final discountPercent = state.cartDiscountPercent;
+    final discountAmount = (rawItemTotal * discountPercent / 100).round();
+    if (discountPercent > 0) {
+      final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
+      final labelPadded = label.padRight(19, ' ');
+      lines.add("Items Total:       ${"₹$rawItemTotal".padLeft(21, ' ')}");
+      lines.add("$labelPadded${"-₹$discountAmount".padLeft(21, ' ')}");
+    }
     lines.add("Subtotal:          ${"₹$sub".padLeft(21, ' ')}");
-    lines.add("GST (5%):          ${"₹$tax".padLeft(21, ' ')}");
+    if (state.showGstOnBills && tax > 0) {
+      lines.add("CGST:              ${"₹${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+      lines.add("SGST:              ${"₹${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+    }
     lines.add("Packaging:         ${"₹$del".padLeft(21, ' ')}");
+    if (state.showGstOnBills && tax > 0) {
+      lines.add("Tax Mode:          ${(state.isGstInclusive ? "Inclusive" : "Exclusive").padLeft(21, ' ')}");
+    }
     lines.add("========================================");
     lines.add("GRAND TOTAL:       ${"₹$tot".padLeft(21, ' ')}");
     lines.add("========================================");
@@ -2303,7 +2808,12 @@ class CartDrawer extends StatelessWidget {
 
     return Container(
       color: const Color(0xFF0F172A),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: 20 + MediaQuery.of(context).padding.bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2413,16 +2923,73 @@ class CartDrawer extends StatelessWidget {
             const SizedBox(height: 16),
             Column(
               children: [
-                _buildSummaryRow('Subtotal', '₹${state.cartSubtotal}'),
-                const SizedBox(height: 8),
-                _buildSummaryRow('GST (5%)', '₹${state.cartGst}'),
-                const SizedBox(height: 8),
-                _buildSummaryRow('Packaging & Delivery', '₹${state.cartDelivery}'),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(color: Color(0x14FFFFFF), height: 1),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('GST Inclusive Prices', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    Switch(
+                      value: state.isGstInclusive,
+                      activeColor: const Color(0xFFFF6F24),
+                      onChanged: (val) {
+                        state.toggleGstInclusive(val);
+                      },
+                    ),
+                  ],
                 ),
-                _buildSummaryRow('Grand Total', '₹${state.cartTotal}', isTotal: true),
+                if (state.allowDiscounts) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Discount (% Off)', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildDiscountButton(state, 0),
+                          const SizedBox(width: 4),
+                          _buildDiscountButton(state, 5),
+                          const SizedBox(width: 4),
+                          _buildDiscountButton(state, 10),
+                          const SizedBox(width: 4),
+                          _buildDiscountButton(state, 15),
+                          const SizedBox(width: 4),
+                          _buildDiscountCustomButton(context, state),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Builder(
+                  builder: (context) {
+                    final rawItemTotal = state.activeCart.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+                    final discountAmount = (rawItemTotal * state.cartDiscountPercent / 100).round();
+                    return Column(
+                      children: [
+                        _buildSummaryRow('Items Total', '₹$rawItemTotal'),
+                        if (state.cartDiscountPercent > 0) ...[
+                          const SizedBox(height: 8),
+                          _buildSummaryRow('Discount (${state.cartDiscountPercent.toStringAsFixed(0)}%)', '-₹$discountAmount', isDiscount: true),
+                        ],
+                        const SizedBox(height: 8),
+                        _buildSummaryRow('Subtotal', '₹${state.cartSubtotal}'),
+                        if (state.showGstOnBills && state.cartGst > 0) ...[
+                          const SizedBox(height: 8),
+                          _buildSummaryRow('CGST', '₹${(state.cartGst / 2.0).toStringAsFixed(2)}'),
+                          const SizedBox(height: 8),
+                          _buildSummaryRow('SGST', '₹${(state.cartGst / 2.0).toStringAsFixed(2)}'),
+                        ],
+                        const SizedBox(height: 8),
+                        _buildSummaryRow('Packaging & Delivery', '₹${state.cartDelivery}'),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Divider(color: Color(0x14FFFFFF), height: 1),
+                        ),
+                        _buildSummaryRow('Grand Total', '₹${state.cartTotal}', isTotal: true),
+                      ],
+                    );
+                  }
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -2488,14 +3055,100 @@ class CartDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryRow(String label, String value, {bool isTotal = false}) {
+  Widget _buildDiscountButton(AppState state, double pct) {
+    final isSelected = state.cartDiscountPercent == pct;
+    return InkWell(
+      onTap: () => state.updateCartDiscount(pct),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF6F24) : const Color(0x0CFFFFFF),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isSelected ? const Color(0xFFFF6F24) : const Color(0x1AFFFFFF)),
+        ),
+        child: Text(
+          '${pct.toStringAsFixed(0)}%',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.white70,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDiscountCustomButton(BuildContext context, AppState state) {
+    final isCustom = state.cartDiscountPercent != 0 &&
+        state.cartDiscountPercent != 5 &&
+        state.cartDiscountPercent != 10 &&
+        state.cartDiscountPercent != 15;
+
+    return InkWell(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) {
+            final controller = TextEditingController();
+            return AlertDialog(
+              backgroundColor: const Color(0xFF12161B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Enter Custom Discount (%)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              content: TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  hintText: 'e.g. 20',
+                  suffixText: '%',
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final val = double.tryParse(controller.text) ?? 0.0;
+                    if (val >= 0 && val <= 100) {
+                      state.updateCartDiscount(val);
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Apply', style: TextStyle(color: Color(0xFFFF6F24), fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isCustom ? const Color(0xFFFF6F24) : const Color(0x0CFFFFFF),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isCustom ? const Color(0xFFFF6F24) : const Color(0x1AFFFFFF)),
+        ),
+        child: Text(
+          isCustom ? '${state.cartDiscountPercent.toStringAsFixed(1)}%' : 'Custom',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isCustom ? Colors.white : Colors.white70,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, {bool isTotal = false, bool isDiscount = false}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
           style: TextStyle(
-            color: isTotal ? Colors.white : const Color(0xFF94A3B8),
+            color: isTotal ? Colors.white : (isDiscount ? const Color(0xFF00AA4F) : const Color(0xFF94A3B8)),
             fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
             fontSize: isTotal ? 16 : 13.5,
           ),
@@ -2503,7 +3156,7 @@ class CartDrawer extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            color: isTotal ? const Color(0xFFFF6F24) : Colors.white,
+            color: isTotal ? const Color(0xFFFF6F24) : (isDiscount ? const Color(0xFF00AA4F) : Colors.white),
             fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
             fontSize: isTotal ? 18 : 13.5,
           ),
@@ -2527,11 +3180,18 @@ class ReceiptPopupOverlay extends StatelessWidget {
     final List<String> lines = [];
     lines.add("========================================");
     lines.add("       ${state.storeName}");
-    lines.add("        GSTIN: ${state.storeGstin}");
+    if (state.storeGstin.isNotEmpty) {
+      lines.add("        GSTIN: ${state.storeGstin}");
+    }
     lines.add("========================================");
     lines.add("Invoice: ${invoice.id}");
     lines.add("Table: ${invoice.tableId}");
-    lines.add("Date: ${invoice.dateTime}");
+    if (invoice.checkInTime != null) {
+      lines.add("Check-In:  ${invoice.checkInTime}");
+      lines.add("Check-Out: ${invoice.dateTime}");
+    } else {
+      lines.add("Date: ${invoice.dateTime}");
+    }
     lines.add("========================================");
     lines.add("ITEMS:");
     
@@ -2543,8 +3203,20 @@ class ReceiptPopupOverlay extends StatelessWidget {
     }
     
     lines.add("========================================");
+    final rawItemTotal = invoice.items.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+    final discountPercent = invoice.discountPercent;
+    final discountAmount = (rawItemTotal * discountPercent / 100).round();
+    if (discountPercent > 0) {
+      final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
+      final labelPadded = label.padRight(19, ' ');
+      lines.add("Items Total:       ${"₹$rawItemTotal".padLeft(21, ' ')}");
+      lines.add("$labelPadded${"-₹$discountAmount".padLeft(21, ' ')}");
+    }
     lines.add("Subtotal:          ${"₹${invoice.subtotal}".padLeft(21, ' ')}");
-    lines.add("GST (5%):          ${"₹${invoice.gst}".padLeft(21, ' ')}");
+    if (invoice.gst > 0) {
+      lines.add("CGST:              ${"₹${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+      lines.add("SGST:              ${"₹${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+    }
     lines.add("Packaging:         ${"₹${invoice.packaging}".padLeft(21, ' ')}");
     lines.add("========================================");
     lines.add("GRAND TOTAL:       ${"₹${invoice.total}".padLeft(21, ' ')}");
@@ -2695,7 +3367,7 @@ class InvoicesListView extends StatelessWidget {
           IconButton(
             icon: Icon(
               Icons.filter_alt_outlined,
-              color: state.activeInvoiceFilter != null ? const Color(0xFFFF6F24) : Colors.white,
+              color: state.activeInvoiceFilter != null ? const Color(0xFF10B981) : Colors.white,
             ),
             onPressed: () => state.navigateToView('invoice-filter'),
           ),
@@ -2723,7 +3395,7 @@ class InvoicesListView extends StatelessWidget {
                               : state.activeInvoiceFilter!.toUpperCase().replaceAll('_', ' '),
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
-                        backgroundColor: const Color(0xFFFF6F24),
+                        backgroundColor: const Color(0xFF10B981),
                         deleteIcon: const Icon(Icons.close, size: 14, color: Colors.white),
                         onDeleted: () {
                           state.setInvoiceFilter(null);
@@ -2741,20 +3413,19 @@ class InvoicesListView extends StatelessWidget {
                         itemBuilder: (context, idx) {
                           final inv = state.filteredInvoices[idx];
                           return ListTile(
-                            title: Text(inv.id, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF6F24), fontFamily: 'monospace')),
+                            title: Text(inv.id, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontFamily: 'monospace')),
                             subtitle: Text('Table: ${inv.tableId} • ${inv.dateTime}', style: const TextStyle(color: Color(0xFF94A3B8))),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text('₹${inv.total}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                                 const SizedBox(width: 8),
-                                OutlinedButton.icon(
+                                IconButton(
                                   onPressed: () {
                                     state.selectedReceiptInvoice = inv;
                                   },
-                                  icon: const Icon(Icons.receipt_long, size: 14),
-                                  label: const Text('View Bill'),
-                                  style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFFF6F24), side: const BorderSide(color: Color(0xFFFF6F24))),
+                                  icon: const Icon(Icons.receipt_long, color: Color(0xFF10B981)),
+                                  tooltip: 'View Bill',
                                 ),
                               ],
                             ),
@@ -2837,7 +3508,7 @@ class _InvoicesSearchViewState extends State<InvoicesSearchView> {
                           },
                           icon: const Icon(Icons.search),
                           label: const Text('Search'),
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6F24), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20)),
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20)),
                         ),
                       ],
                     ),
@@ -2868,7 +3539,7 @@ class _InvoicesSearchViewState extends State<InvoicesSearchView> {
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('${inv.id} (Table: ${inv.tableId})', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF6F24), fontFamily: 'monospace')),
+                                        Text('${inv.id} (Table: ${inv.tableId})', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6366F1), fontFamily: 'monospace')),
                                         const SizedBox(height: 4),
                                         Text(inv.dateTime, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                                       ],
@@ -2879,7 +3550,7 @@ class _InvoicesSearchViewState extends State<InvoicesSearchView> {
                                         const SizedBox(width: 16),
                                         ElevatedButton(
                                           onPressed: () => state.selectedReceiptInvoice = inv,
-                                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6F24)),
+                                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
                                           child: const Text('Details'),
                                         ),
                                       ],
@@ -2972,9 +3643,9 @@ class RevenueReportView extends StatelessWidget {
                 childAspectRatio: MediaQuery.of(context).size.width > 700 ? 2.2 : 3.0,
               ),
               children: [
-                _buildStatCard('Gross Revenue', '₹$gross', 'Total sales since deployment', valueColor: const Color(0xFFFF6F24)),
-                _buildStatCard('Orders Placed', '$count', 'Total successful checkouts', valueColor: const Color(0xFFFF6F24)),
-                _buildStatCard('GST Collected', '₹$gstSum', 'Accumulated 5% GST tax', valueColor: const Color(0xFFFF6F24)),
+                _buildStatCard('Gross Revenue', '₹$gross', 'Total sales since deployment', valueColor: const Color(0xFF8B5CF6)),
+                _buildStatCard('Orders Placed', '$count', 'Total successful checkouts', valueColor: const Color(0xFF06B6D4)),
+                _buildStatCard('GST Collected', '₹$gstSum', 'Accumulated 5% GST tax', valueColor: const Color(0xFFEC4899)),
               ],
             ),
             const SizedBox(height: 24),
@@ -3106,7 +3777,7 @@ class _ChartBar extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
-              colors: [Color(0xFFE6550F), Color(0xFFFF6F24)],
+              colors: [Color(0xFF6366F1), Color(0xFF3B82F6)],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
           ),
@@ -3476,6 +4147,699 @@ class AccountsReportView extends StatelessWidget {
   }
 }
 
+// --- VIEW: TABLE PERFORMANCE REPORT VIEW ---
+
+class TableReportView extends StatefulWidget {
+  final GlobalKey<ScaffoldState> scaffoldKey;
+  const TableReportView({super.key, required this.scaffoldKey});
+
+  @override
+  State<TableReportView> createState() => _TableReportViewState();
+}
+
+class _TableReportViewState extends State<TableReportView> {
+  String _filter = 'all'; // 'daily', 'weekly', 'monthly', 'all', 'live'
+
+  String _getLiveDurationText(String tableId, AppState state) {
+    final timeStr = state.tableOccupiedTimes[tableId];
+    if (timeStr == null) return '';
+    try {
+      final time = DateTime.parse(timeStr);
+      final diff = DateTime.now().difference(time);
+      if (diff.inMinutes < 60) {
+        return "${diff.inMinutes}m";
+      } else {
+        final hrs = diff.inHours;
+        final mins = diff.inMinutes % 60;
+        return "${hrs}h ${mins}m";
+      }
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _getInvoiceDurationText(InvoiceModel inv) {
+    if (inv.checkInTime == null) return '';
+    try {
+      final checkIn = parseInvoiceDateHelper(inv.checkInTime!);
+      final checkOut = parseInvoiceDateHelper(inv.dateTime);
+      if (checkIn == null || checkOut == null) return '';
+      final diff = checkOut.difference(checkIn);
+      if (diff.inSeconds < 0) return '0m';
+      if (diff.inMinutes < 60) {
+        return "${diff.inMinutes}m";
+      } else {
+        final hrs = diff.inHours;
+        final mins = diff.inMinutes % 60;
+        return "${hrs}h ${mins}m";
+      }
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _getDateRangeDescription() {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+    final monthStart = DateTime(now.year, now.month, 1);
+
+    if (_filter == 'live') {
+      return "Currently active tables and their live orders";
+    } else if (_filter == 'daily') {
+      return "Today: ${todayStart.day}/${todayStart.month}/${todayStart.year}";
+    } else if (_filter == 'weekly') {
+      return "This Week: ${weekStart.day}/${weekStart.month}/${weekStart.year} to ${now.day}/${now.month}/${now.year}";
+    } else if (_filter == 'monthly') {
+      return "This Month: ${monthStart.day}/${monthStart.month}/${monthStart.year} to ${now.day}/${now.month}/${now.year}";
+    } else {
+      return "All-time accumulated records";
+    }
+  }
+
+  Widget _buildFilterChip(String label, String value) {
+    final isSelected = _filter == value;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? Colors.white : Colors.white60,
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      selected: isSelected,
+      onSelected: (val) {
+        if (val) {
+          setState(() {
+            _filter = value;
+          });
+        }
+      },
+      selectedColor: value == 'live' ? const Color(0xFFEF4444) : const Color(0xFF8B5CF6),
+      backgroundColor: Colors.white.withOpacity(0.05),
+      checkmarkColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppStateProvider.of(context);
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+    final monthStart = DateTime(now.year, now.month, 1);
+
+    final List<InvoiceModel> periodInvoices = state.invoices.where((inv) {
+      final date = inv.parsedDateTime;
+      if (_filter == 'daily') {
+        return date.isAfter(todayStart.subtract(const Duration(microseconds: 1)));
+      } else if (_filter == 'weekly') {
+        return date.isAfter(weekStart.subtract(const Duration(microseconds: 1)));
+      } else if (_filter == 'monthly') {
+        return date.isAfter(monthStart.subtract(const Duration(microseconds: 1)));
+      }
+      return true; // all time
+    }).toList();
+
+    final Map<String, int> tableOccupiedCount = {};
+    final Map<String, int> tableRevenue = {};
+    final Map<String, Map<String, int>> tableItemQuantities = {};
+    final Map<String, List<InvoiceModel>> tableInvoices = {};
+
+    for (var table in state.tables) {
+      tableOccupiedCount[table.id] = 0;
+      tableRevenue[table.id] = 0;
+      tableItemQuantities[table.id] = {};
+      tableInvoices[table.id] = [];
+    }
+
+    for (var inv in periodInvoices) {
+      final tableId = inv.tableId;
+      if (!tableOccupiedCount.containsKey(tableId)) {
+        tableOccupiedCount[tableId] = 0;
+        tableRevenue[tableId] = 0;
+        tableItemQuantities[tableId] = {};
+        tableInvoices[tableId] = [];
+      }
+
+      tableOccupiedCount[tableId] = tableOccupiedCount[tableId]! + 1;
+      tableRevenue[tableId] = tableRevenue[tableId]! + inv.total;
+      tableInvoices[tableId]!.add(inv);
+
+      final itemMap = tableItemQuantities[tableId]!;
+      for (var item in inv.items) {
+        itemMap[item.name] = (itemMap[item.name] ?? 0) + item.qty;
+      }
+    }
+
+    final displayTables = _filter == 'live'
+        ? state.tables.where((t) => state.activeCarts[t.id]?.isNotEmpty ?? false).toList()
+        : state.tables;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF12161B),
+        leading: MediaQuery.of(context).size.width <= 1100
+            ? IconButton(icon: const Icon(Icons.menu), onPressed: () => widget.scaffoldKey.currentState?.openDrawer())
+            : null,
+        title: const Text('Table Performance Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0x7F191E28),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0x0CFFFFFF)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Seating Performance & Revenue', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      _getDateRangeDescription(),
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterChip('Live Performance', 'live'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('Daily (Today)', 'daily'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('Weekly', 'weekly'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('Monthly', 'monthly'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('All Time', 'all'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Color(0x0CFFFFFF), height: 1),
+
+              Expanded(
+                child: _filter == 'live' && displayTables.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.table_restaurant, size: 48, color: Colors.white24),
+                            SizedBox(height: 12),
+                            Text(
+                              'No active orders on tables right now.',
+                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: displayTables.length,
+                        itemBuilder: (context, idx) {
+                          final table = displayTables[idx];
+                          final count = tableOccupiedCount[table.id] ?? 0;
+                          final revenue = tableRevenue[table.id] ?? 0;
+                          final avgValue = count > 0 ? (revenue / count).round() : 0;
+                          final activeCartItems = state.activeCarts[table.id] ?? [];
+                          final isLiveOccupied = activeCartItems.isNotEmpty;
+                          final liveTotal = isLiveOccupied
+                              ? activeCartItems.fold<double>(0, (sum, item) => sum + (item.price * item.qty))
+                              : 0;
+                          final liveDuration = _getLiveDurationText(table.id, state);
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isLiveOccupied
+                                  ? const Color(0x0CFF4444)
+                                  : const Color(0x05FFFFFF),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isLiveOccupied
+                                    ? const Color(0x22FF4444)
+                                    : const Color(0x08FFFFFF),
+                                width: 1.2,
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              title: Row(
+                                children: [
+                                  Text(table.id, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  const SizedBox(width: 8),
+                                  if (isLiveOccupied)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF4444),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.fiber_manual_record, color: Colors.white, size: 8),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'LIVE: ₹${liveTotal.round()}',
+                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 6),
+                                  if (_filter == 'live') ...[
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.access_time, size: 12, color: Color(0xFFFF6F24)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Active: $liveDuration',
+                                          style: const TextStyle(color: Color(0xFFFF6F24), fontSize: 12, fontWeight: FontWeight.w500),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Live Items: ${activeCartItems.map((e) => "${e.name} x${e.qty}").join(", ")}',
+                                      style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 12, fontStyle: FontStyle.italic),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ] else ...[
+                                    Text(
+                                      'Occupied: $count times • Avg Bill: ₹$avgValue',
+                                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
+                                    ),
+                                    if (isLiveOccupied) ...[
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.access_time, size: 12, color: Color(0xFFFF6F24)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Active: $liveDuration',
+                                            style: const TextStyle(color: Color(0xFFFF6F24), fontSize: 12, fontWeight: FontWeight.w500),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Live Items: ${activeCartItems.map((e) => "${e.name} x${e.qty}").join(", ")}',
+                                        style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 12, fontStyle: FontStyle.italic),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ],
+                              ),
+                              trailing: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    _filter == 'live' ? 'Live Order Total' : 'Total Revenue',
+                                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _filter == 'live' ? '₹${liveTotal.round()}' : '₹$revenue',
+                                    style: TextStyle(
+                                      color: _filter == 'live' ? const Color(0xFFFF4444) : const Color(0xFF8B5CF6),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () {
+                                _showTableDetailDialog(
+                                  context,
+                                  table.id,
+                                  count,
+                                  revenue,
+                                  tableItemQuantities[table.id] ?? {},
+                                  tableInvoices[table.id] ?? [],
+                                  activeCartItems,
+                                  state.tableOccupiedTimes[table.id],
+                                  isLiveMode: _filter == 'live',
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTableDetailDialog(
+    BuildContext context,
+    String tableId,
+    int occupiedCount,
+    int totalRevenue,
+    Map<String, int> itemsMap,
+    List<InvoiceModel> invoices,
+    List<CartItem> liveItems,
+    String? occupiedTimeStr, {
+    bool isLiveMode = false,
+  }) {
+    final sortedItems = itemsMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    String liveDuration = '';
+    String formattedOccupiedTime = '';
+    if (occupiedTimeStr != null) {
+      try {
+        final occupiedDt = DateTime.parse(occupiedTimeStr);
+        final h = occupiedDt.hour.toString().padLeft(2, '0');
+        final m = occupiedDt.minute.toString().padLeft(2, '0');
+        final ampm = occupiedDt.hour >= 12 ? 'PM' : 'AM';
+        formattedOccupiedTime = "$h:$m $ampm";
+
+        final diff = DateTime.now().difference(occupiedDt);
+        if (diff.inMinutes < 60) {
+          liveDuration = "${diff.inMinutes}m";
+        } else {
+          final hrs = diff.inHours;
+          final mins = diff.inMinutes % 60;
+          liveDuration = "${hrs}h ${mins}m";
+        }
+      } catch (_) {}
+    }
+    final double liveTotal = liveItems.fold<double>(0, (sum, item) => sum + (item.price * item.qty));
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF12161B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: Color(0x0CFFFFFF)),
+          ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.table_chart, color: Color(0xFF8B5CF6)),
+                  const SizedBox(width: 10),
+                  Text('Table $tableId Report', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+              )
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (liveItems.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0x11FF4444),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0x22FF4444), width: 1.2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.fiber_manual_record, color: Color(0xFFFF4444), size: 14),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'LIVE ACTIVE ORDER',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF4444), letterSpacing: 0.5),
+                                  ),
+                                ],
+                              ),
+                              if (liveDuration.isNotEmpty)
+                                Text(
+                                  'Time: $liveDuration ($formattedOccupiedTime)',
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Column(
+                            children: liveItems.map((item) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.name,
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${item.qty} x ₹${item.price}',
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Text(
+                                      '₹${item.qty * item.price}',
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 10),
+                          const Divider(color: Color(0x22FF4444), height: 1),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Estimated Total', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70)),
+                              Text(
+                                '₹${liveTotal.round()}',
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFFFF4444)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (!isLiveMode) ...[
+                    if (liveItems.isNotEmpty) const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Column(
+                          children: [
+                            const Text('Occupied Count', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                            const SizedBox(height: 4),
+                            Text('$occupiedCount times', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
+                        Column(
+                          children: [
+                            const Text('Total Revenue', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                            const SizedBox(height: 4),
+                            Text('₹$totalRevenue', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                          ],
+                        ),
+                        Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
+                        Column(
+                          children: [
+                            const Text('Avg Order Value', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                            const SizedBox(height: 4),
+                            Text('₹${occupiedCount > 0 ? (totalRevenue / occupiedCount).round() : 0}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Color(0x14FFFFFF)),
+                    const SizedBox(height: 8),
+
+                    const Text('Items Ordered on this Table', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    if (sortedItems.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: Text('No items ordered yet.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5)),
+                        ),
+                      )
+                    else
+                      Column(
+                        children: sortedItems.map((entry) {
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.03),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(entry.key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                Text('${entry.value} units', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Color(0x14FFFFFF)),
+                    const SizedBox(height: 8),
+
+                    const Text('Recent Bills & Sessions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    if (invoices.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: Text('No completed bills.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5)),
+                        ),
+                      )
+                    else
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          dividerColor: Colors.transparent,
+                          unselectedWidgetColor: Colors.white54,
+                        ),
+                        child: Column(
+                          children: invoices.take(5).map((inv) {
+                            final duration = _getInvoiceDurationText(inv);
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.02),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0x0CFFFFFF)),
+                              ),
+                              child: ExpansionTile(
+                                dense: true,
+                                iconColor: const Color(0xFF8B5CF6),
+                                tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                                childrenPadding: const EdgeInsets.all(12).copyWith(top: 0),
+                                title: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      inv.id,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace', color: Color(0xFF8B5CF6), fontSize: 13),
+                                    ),
+                                    Text(
+                                      '₹${inv.total}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    Text('Checkout: ${inv.dateTime}', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                                    if (inv.checkInTime != null) ...[
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.history_toggle_off, size: 11, color: Color(0xFF94A3B8)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Duration: ${duration.isNotEmpty ? duration : "N/A"} (from ${inv.checkInTime!.split(', ').last})',
+                                            style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                children: [
+                                  const Divider(color: Color(0x14FFFFFF), height: 16),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: inv.items.map((item) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 3),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                item.name,
+                                                style: const TextStyle(fontSize: 12, color: Color(0xFFCBD5E1)),
+                                              ),
+                                            ),
+                                            Text(
+                                              '${item.qty} x ₹${item.price}',
+                                              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              '₹${item.qty * item.price}',
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close', style: TextStyle(color: Colors.white60)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 // --- VIEW: TABLES SETTINGS VIEW ---
 
 class TableSettingsView extends StatelessWidget {
@@ -3508,9 +4872,11 @@ class TableSettingsView extends StatelessWidget {
               ),
               const Divider(color: Color(0x0CFFFFFF), height: 1),
               Expanded(
-                child: ListView.builder(
-                  itemCount: state.tables.length,
-                  itemBuilder: (context, idx) {
+                child: state.tables.isEmpty
+                    ? const Center(child: Text('No tables configured in layout. Add tables on the Home dashboard.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5)))
+                    : ListView.builder(
+                        itemCount: state.tables.length,
+                        itemBuilder: (context, idx) {
                     final table = state.tables[idx];
                     final hasOrder = state.activeCarts[table.id]?.isNotEmpty ?? false;
 
@@ -3600,11 +4966,16 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
             children: [
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('Menu List CRUD', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Row(
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
                       children: [
                         ElevatedButton.icon(
                           onPressed: () async {
@@ -3620,7 +4991,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                                   ),
                                   TextButton(
                                     onPressed: () => Navigator.pop(context, true),
-                                    child: const Text('Reset & Sync', style: TextStyle(color: Color(0xFFFF6F24))),
+                                    child: const Text('Reset & Sync', style: TextStyle(color: Color(0xFFF97316))),
                                   ),
                                 ],
                               ),
@@ -3640,7 +5011,6 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: Color(0x14FFFFFF))),
                           ),
                         ),
-                        const SizedBox(width: 12),
                         ElevatedButton.icon(
                           onPressed: () {
                             Navigator.push(
@@ -3651,7 +5021,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                           icon: const Icon(Icons.add, size: 16),
                           label: const Text('Add Item', style: TextStyle(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF6F24),
+                            backgroundColor: const Color(0xFFF97316),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
@@ -3671,7 +5041,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                   },
                   decoration: InputDecoration(
                     hintText: 'Search items by name, category, or position...',
-                    prefixIcon: const Icon(Icons.search, color: Color(0xFFFF6F24)),
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFFF97316)),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, color: Colors.white70),
@@ -3691,16 +5061,18 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFFFF6F24)),
+                      borderSide: const BorderSide(color: Color(0xFFF97316)),
                     ),
                   ),
                 ),
               ),
               const Divider(color: Color(0x0CFFFFFF), height: 1),
               Expanded(
-                child: ListView.builder(
-                  itemCount: filteredMenu.length,
-                  itemBuilder: (context, idx) {
+                child: filteredMenu.isEmpty
+                    ? const Center(child: Text('No menu items found. Add items using the button above or Reset to defaults.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5), textAlign: TextAlign.center))
+                    : ListView.builder(
+                        itemCount: filteredMenu.length,
+                        itemBuilder: (context, idx) {
                     final item = filteredMenu[idx];
                     return ListTile(
                       leading: Container(
@@ -3729,7 +5101,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.edit, color: Color(0xFFFF6F24)),
+                            icon: const Icon(Icons.edit, color: Color(0xFF3B82F6)),
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -3740,15 +5112,10 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                             },
                             tooltip: 'Edit Item',
                           ),
-                          const SizedBox(width: 8),
-                          OutlinedButton.icon(
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
                             onPressed: () => state.deleteMenuItem(item.id),
-                            icon: const Icon(Icons.delete, size: 14),
-                            label: const Text('Delete'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFFF4444),
-                              side: const BorderSide(color: Color(0xFFFF4444)),
-                            ),
+                            tooltip: 'Delete Item',
                           ),
                         ],
                       ),
@@ -3767,7 +5134,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
             MaterialPageRoute(builder: (context) => const NewItemScreen()),
           );
         },
-        backgroundColor: const Color(0xFFFF6F24),
+        backgroundColor: const Color(0xFFF97316),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Add New Item', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -3787,9 +5154,35 @@ class _NewItemScreenState extends State<NewItemScreen> {
   final _nameController = TextEditingController();
   final _serialController = TextEditingController();
   final _priceController = TextEditingController();
+  final _customGstController = TextEditingController();
+  bool _isCustomGst = false;
   String _categoryVal = 'Sandwich AC';
   bool _isVeg = true;
   int _gstRate = 5;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = AppStateProvider.of(context);
+      setState(() {
+        _gstRate = state.defaultGstRate;
+        _isCustomGst = _gstRate != 0 && _gstRate != 5 && _gstRate != 12 && _gstRate != 18 && _gstRate != 28;
+        if (_isCustomGst) {
+          _customGstController.text = _gstRate.toString();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _serialController.dispose();
+    _priceController.dispose();
+    _customGstController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3851,7 +5244,9 @@ class _NewItemScreenState extends State<NewItemScreen> {
                   controller: _priceController,
                   hint: 'e.g. 150',
                   keyboardType: TextInputType.number,
-                  subtext: 'Price of the item is inclusive of GST',
+                  subtext: state.isGstInclusive
+                      ? 'Price of the item is inclusive of GST'
+                      : 'Price of the item is exclusive of GST (GST will be added on top)',
                 ),
                 const SizedBox(height: 24),
 
@@ -3946,14 +5341,38 @@ class _NewItemScreenState extends State<NewItemScreen> {
 
                 // GST Radio Row 2
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildGstRadio(18),
-                    const SizedBox(width: 48),
                     _buildGstRadio(28),
+                    _buildCustomGstRadio(),
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                if (_isCustomGst) ...[
+                  TextField(
+                    controller: _customGstController,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontSize: 15),
+                    decoration: InputDecoration(
+                      labelText: 'Custom GST Rate (%)',
+                      labelStyle: const TextStyle(color: Color(0xFFFF6F24)),
+                      hintText: 'e.g. 15',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFFF6F24)),
+                      ),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        _gstRate = int.tryParse(val) ?? 0;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // Italics help text
                 Center(
@@ -3991,8 +5410,39 @@ class _NewItemScreenState extends State<NewItemScreen> {
     );
   }
 
+  Widget _buildCustomGstRadio() {
+    final isSelected = _isCustomGst;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Custom',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Radio<bool>(
+          value: true,
+          groupValue: _isCustomGst ? true : null,
+          activeColor: const Color(0xFFFF6F24),
+          onChanged: (val) {
+            if (val == true) {
+              setState(() {
+                _isCustomGst = true;
+                _gstRate = int.tryParse(_customGstController.text) ?? 0;
+              });
+            }
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildGstRadio(int rate) {
-    final isSelected = _gstRate == rate;
+    final isSelected = !_isCustomGst && _gstRate == rate;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -4007,11 +5457,12 @@ class _NewItemScreenState extends State<NewItemScreen> {
         const SizedBox(width: 4),
         Radio<int>(
           value: rate,
-          groupValue: _gstRate,
+          groupValue: _isCustomGst ? -1 : _gstRate,
           activeColor: const Color(0xFFFF6F24),
           onChanged: (val) {
             if (val != null) {
               setState(() {
+                _isCustomGst = false;
                 _gstRate = val;
               });
             }
@@ -4114,6 +5565,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
   final _nameController = TextEditingController();
   final _serialController = TextEditingController();
   final _priceController = TextEditingController();
+  final _customGstController = TextEditingController();
+  bool _isCustomGst = false;
   String _categoryVal = 'Sandwich AC';
   bool _isVeg = true;
   int _gstRate = 5;
@@ -4127,6 +5580,19 @@ class _EditItemScreenState extends State<EditItemScreen> {
     _categoryVal = widget.item.category;
     _isVeg = widget.item.isVeg;
     _gstRate = widget.item.gstRate;
+    _isCustomGst = _gstRate != 0 && _gstRate != 5 && _gstRate != 12 && _gstRate != 18 && _gstRate != 28;
+    if (_isCustomGst) {
+      _customGstController.text = _gstRate.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _serialController.dispose();
+    _priceController.dispose();
+    _customGstController.dispose();
+    super.dispose();
   }
 
   @override
@@ -4189,7 +5655,9 @@ class _EditItemScreenState extends State<EditItemScreen> {
                   controller: _priceController,
                   hint: 'e.g. 150',
                   keyboardType: TextInputType.number,
-                  subtext: 'Price of the item is inclusive of GST',
+                  subtext: state.isGstInclusive
+                      ? 'Price of the item is inclusive of GST'
+                      : 'Price of the item is exclusive of GST (GST will be added on top)',
                 ),
                 const SizedBox(height: 24),
 
@@ -4284,14 +5752,38 @@ class _EditItemScreenState extends State<EditItemScreen> {
 
                 // GST Radio Row 2
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildGstRadio(18),
-                    const SizedBox(width: 48),
                     _buildGstRadio(28),
+                    _buildCustomGstRadio(),
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                if (_isCustomGst) ...[
+                  TextField(
+                    controller: _customGstController,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontSize: 15),
+                    decoration: InputDecoration(
+                      labelText: 'Custom GST Rate (%)',
+                      labelStyle: const TextStyle(color: Color(0xFFFF6F24)),
+                      hintText: 'e.g. 15',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFFF6F24)),
+                      ),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        _gstRate = int.tryParse(val) ?? 0;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // Italics help text
                 Center(
@@ -4329,8 +5821,39 @@ class _EditItemScreenState extends State<EditItemScreen> {
     );
   }
 
+  Widget _buildCustomGstRadio() {
+    final isSelected = _isCustomGst;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Custom',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Radio<bool>(
+          value: true,
+          groupValue: _isCustomGst ? true : null,
+          activeColor: const Color(0xFFFF6F24),
+          onChanged: (val) {
+            if (val == true) {
+              setState(() {
+                _isCustomGst = true;
+                _gstRate = int.tryParse(_customGstController.text) ?? 0;
+              });
+            }
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildGstRadio(int rate) {
-    final isSelected = _gstRate == rate;
+    final isSelected = !_isCustomGst && _gstRate == rate;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -4345,11 +5868,12 @@ class _EditItemScreenState extends State<EditItemScreen> {
         const SizedBox(width: 4),
         Radio<int>(
           value: rate,
-          groupValue: _gstRate,
+          groupValue: _isCustomGst ? -1 : _gstRate,
           activeColor: const Color(0xFFFF6F24),
           onChanged: (val) {
             if (val != null) {
               setState(() {
+                _isCustomGst = false;
                 _gstRate = val;
               });
             }
@@ -4469,8 +5993,11 @@ class CategorySettingsView extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('Supported Categories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ElevatedButton.icon(
@@ -4483,7 +6010,7 @@ class CategorySettingsView extends StatelessWidget {
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF6F24),
+                        backgroundColor: const Color(0xFF8B5CF6),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -4510,21 +6037,17 @@ class CategorySettingsView extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: const Color(0x19FF6F24),
+                                    color: const Color(0x198B5CF6),
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: const Color(0x33FF6F24)),
+                                    border: Border.all(color: const Color(0x338B5CF6)),
                                   ),
-                                  child: Text('$count Items', style: const TextStyle(color: Color(0xFFFF6F24), fontSize: 11, fontWeight: FontWeight.bold)),
+                                  child: Text('$count Items', style: const TextStyle(color: Color(0xFF8B5CF6), fontSize: 11, fontWeight: FontWeight.bold)),
                                 ),
                                 const SizedBox(width: 12),
-                                OutlinedButton.icon(
+                                IconButton(
                                   onPressed: () => state.deleteCategory(cat.name),
-                                  icon: const Icon(Icons.delete, size: 14),
-                                  label: const Text('Delete'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFFFF4444),
-                                    side: const BorderSide(color: Color(0xFFFF4444)),
-                                  ),
+                                  icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
+                                  tooltip: 'Delete Category',
                                 ),
                               ],
                             ),
@@ -4543,7 +6066,7 @@ class CategorySettingsView extends StatelessWidget {
             MaterialPageRoute(builder: (context) => const AddCategoryScreen()),
           );
         },
-        backgroundColor: const Color(0xFFFF6F24),
+        backgroundColor: const Color(0xFF8B5CF6),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Add Category', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -4720,6 +6243,10 @@ class StoreSettingsView extends StatefulWidget {
 class _StoreSettingsViewState extends State<StoreSettingsView> {
   final nameController = TextEditingController();
   final gstinController = TextEditingController();
+  final deliveryController = TextEditingController();
+  final defaultGstController = TextEditingController();
+  bool _showGst = true;
+  bool _allowDiscounts = true;
 
   @override
   void initState() {
@@ -4729,7 +6256,22 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
       final state = AppStateProvider.of(context);
       nameController.text = state.storeName;
       gstinController.text = state.storeGstin;
+      deliveryController.text = state.parcelDeliveryCharge.toString();
+      defaultGstController.text = state.defaultGstRate.toString();
+      setState(() {
+        _showGst = state.showGstOnBills;
+        _allowDiscounts = state.allowDiscounts;
+      });
     });
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    gstinController.dispose();
+    deliveryController.dispose();
+    defaultGstController.dispose();
+    super.dispose();
   }
 
   @override
@@ -4744,71 +6286,151 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
             : null,
         title: const Text('Store Settings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
       ),
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.all(24),
+      body: SingleChildScrollView(
+        child: Center(
           child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Configure Store Branding', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                const Text(
-                  'Change the restaurant display name and billing GSTIN license printed on drawer and receipts.',
-                  style: TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.4),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(labelText: 'Restaurant Display Name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: gstinController,
-                  decoration: InputDecoration(labelText: 'GSTIN / Business Registration', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                ),
-                const SizedBox(height: 16),
-                const Text('Default Parcel Mode', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: state.defaultParcelMode,
-                  dropdownColor: const Color(0xFF12161B),
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Configure Store Branding', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Change the restaurant display name and billing GSTIN license printed on drawer and receipts.',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.4),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'pickup', child: Text('Pickup (No delivery charge)')),
-                    DropdownMenuItem(value: 'delivery', child: Text('Delivery (Rs. 40 delivery charge)')),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(labelText: 'Restaurant Display Name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: gstinController,
+                    decoration: InputDecoration(labelText: 'GSTIN / Business Registration', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: deliveryController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Parcel / Delivery Charge (₹)',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Default Parcel Mode', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: state.defaultParcelMode,
+                    dropdownColor: const Color(0xFF12161B),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: 'pickup', child: Text('Pickup (No delivery charge)')),
+                      DropdownMenuItem(value: 'delivery', child: Text('Delivery (₹${state.parcelDeliveryCharge.round()} delivery charge)')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        state.setDefaultParcelMode(val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Show/Calculate GST on Bills', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                      Switch(
+                        value: _showGst,
+                        activeColor: const Color(0xFFD946EF),
+                        onChanged: (val) {
+                          setState(() {
+                            _showGst = val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Allow Bill Discounts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                      Switch(
+                        value: _allowDiscounts,
+                        activeColor: const Color(0xFFD946EF),
+                        onChanged: (val) {
+                          setState(() {
+                            _allowDiscounts = val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (_showGst) ...[
+                    const Text('Default GST Rate (%)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: defaultGstController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Default GST Rate (%)',
+                        hintText: 'e.g. 5',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Default GST Calculation Mode', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<bool>(
+                      value: state.isGstInclusive,
+                      dropdownColor: const Color(0xFF12161B),
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: true, child: Text('Tax Inclusive (GST included in Price)')),
+                        DropdownMenuItem(value: false, child: Text('Tax Exclusive (Add GST on top of Price)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          state.toggleGstInclusive(val);
+                        }
+                      },
+                    ),
                   ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      state.setDefaultParcelMode(val);
-                    }
-                  },
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    final name = nameController.text.trim();
-                    final gstin = gstinController.text.trim();
-                    if (name.isNotEmpty && gstin.isNotEmpty) {
-                      state.saveStoreSettings(name, gstin);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Branding details saved successfully!')));
-                    }
-                  },
-                  icon: const Icon(Icons.save),
-                  label: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF6F24),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(48),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      final name = nameController.text.trim();
+                      final gstin = gstinController.text.trim();
+                      final charge = double.tryParse(deliveryController.text.trim()) ?? 40.0;
+                      final defaultGst = int.tryParse(defaultGstController.text.trim()) ?? 5;
+                      if (name.isNotEmpty) {
+                        state.saveStoreSettings(name, gstin, charge, state.isGstInclusive, _showGst, _allowDiscounts, defaultGst);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Branding details saved successfully!')));
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter restaurant display name.')));
+                      }
+                    },
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD946EF),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -5234,8 +6856,15 @@ class _DevicePlaceholderViewState extends State<DevicePlaceholderView> {
                     trailing: Switch(
                       value: state.isPrinterConnected,
                       activeColor: const Color(0xFFFF6F24),
-                      onChanged: (val) {
-                        state.togglePrinterConnection(val);
+                      onChanged: (val) async {
+                        await state.togglePrinterConnection(val);
+                        if (context.mounted) {
+                          if (val && !state.isPrinterConnected) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Could not connect to printer. Please turn ON the printer and reconnect from Detect Printer.')),
+                            );
+                          }
+                        }
                       },
                     ),
                   ),
@@ -5287,6 +6916,12 @@ class _DevicePlaceholderViewState extends State<DevicePlaceholderView> {
                       _printTestPage(context, state);
                     }
                   },
+                ),
+                _buildSettingCard(
+                  icon: Icons.bug_report,
+                  title: 'Bluetooth Diagnostic Logs',
+                  subtitle: '${state.btLogs.length} events recorded — Tap to view connection history & troubleshoot',
+                  onTap: () => state.navigateToView('bt-logs'),
                 ),
                 _buildSettingCard(
                   icon: Icons.description_outlined,
@@ -6018,6 +7653,89 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
   final expiryController = TextEditingController();
   final appIdController = TextEditingController();
 
+  bool isDeveloperMode = false;
+  int _devTapCount = 0;
+  DateTime? _lastDevTapTime;
+
+  void _promptDeveloperPassword(BuildContext context, VoidCallback onSuccess) {
+    final passwordController = TextEditingController();
+    String errorMsg = '';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF12161B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0x0CFFFFFF)),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.developer_mode, color: Color(0xFFFF6F24)),
+                  SizedBox(width: 8),
+                  Text('Developer Authorization', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Please enter the developer password to authorize this action.',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Developer Password',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                    ),
+                  ),
+                  if (errorMsg.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMsg,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ]
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final entered = passwordController.text.trim();
+                    if (entered == 'ahar2026') {
+                      Navigator.pop(context);
+                      onSuccess();
+                    } else {
+                      setDialogState(() {
+                        errorMsg = 'Incorrect Password. Access Denied.';
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF6F24),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Authorize'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -6257,7 +7975,29 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                 ),
                 const SizedBox(height: 24),
 
-                const Text('SaaS Tenant Configuration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                GestureDetector(
+                  onTap: () {
+                    final now = DateTime.now();
+                    if (_lastDevTapTime == null || now.difference(_lastDevTapTime!) > const Duration(seconds: 2)) {
+                      _devTapCount = 1;
+                    } else {
+                      _devTapCount++;
+                    }
+                    _lastDevTapTime = now;
+                    if (_devTapCount >= 6) {
+                      _devTapCount = 0;
+                      _promptDeveloperPassword(context, () {
+                        setState(() {
+                          isDeveloperMode = true;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Developer Mode Activated! Override controls unlocked.')),
+                        );
+                      });
+                    }
+                  },
+                  child: const Text('SaaS Tenant Configuration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -6268,33 +8008,192 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                       Text('Licensed Tenant ID: ${state.appId}', style: const TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Text('Active License Key: ${state.saasLicenseKey}', style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFFF6F24), fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Text('SaaS Status: ${saasStatus.toUpperCase()}', style: TextStyle(fontWeight: FontWeight.w600, color: saasStatus == 'active' ? Colors.greenAccent : Colors.redAccent)),
+                      const SizedBox(height: 6),
+                      Text('SaaS Expiry Date: ${expiryController.text.isNotEmpty ? expiryController.text : "N/A"}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 12),
+                      const Text('Registered Terminals/Devices:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.white70)),
+                      const SizedBox(height: 6),
+                      if (state.saasRegisteredDevices.isEmpty)
+                        const Text('No devices registered.', style: TextStyle(fontSize: 12, color: Colors.white38))
+                      else
+                        ...state.saasRegisteredDevices.map((devId) {
+                          final isThisDevice = devId == state.getOrCreateDeviceId();
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        devId,
+                                        style: TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontSize: 11,
+                                          color: isThisDevice ? const Color(0xFFFF6F24) : Colors.white70,
+                                          fontWeight: isThisDevice ? FontWeight.bold : FontWeight.normal,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (isThisDevice)
+                                        const Text(
+                                          '(This POS Terminal)',
+                                          style: TextStyle(fontSize: 9, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                  onPressed: () {
+                                    _promptDeveloperPassword(context, () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (confirmCtx) {
+                                          return AlertDialog(
+                                            backgroundColor: const Color(0xFF12161B),
+                                            title: const Text('Unregister Device'),
+                                            content: Text('Are you sure you want to remove device ID $devId from this license?'),
+                                            actions: [
+                                              TextButton(onPressed: () => Navigator.pop(confirmCtx), child: const Text('Cancel')),
+                                              ElevatedButton(
+                                                onPressed: () async {
+                                                  Navigator.pop(confirmCtx);
+                                                  BuildContext? loadingCtx;
+                                                  showDialog(
+                                                    context: context,
+                                                    barrierDismissible: false,
+                                                    builder: (lCtx) {
+                                                      loadingCtx = lCtx;
+                                                      return const Center(child: CircularProgressIndicator(color: Color(0xFFFF6F24)));
+                                                    },
+                                                  );
+                                                  try {
+                                                    await state.removeDeviceFromLicenseCloud(devId);
+                                                  } catch (e) {
+                                                    debugPrint('Error unregistering device: $e');
+                                                  } finally {
+                                                    if (loadingCtx != null && loadingCtx!.mounted) {
+                                                      Navigator.pop(loadingCtx!);
+                                                    }
+                                                  }
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('Device unregistered successfully.')),
+                                                    );
+                                                  }
+                                                },
+                                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4444)),
+                                                child: const Text('Remove'),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          _promptDeveloperPassword(context, () {
+                            showDialog(
+                              context: context,
+                              builder: (confirmCtx) {
+                                return AlertDialog(
+                                  backgroundColor: const Color(0xFF12161B),
+                                  title: const Text('Clear All Devices'),
+                                  content: const Text('Are you sure you want to clear ALL registered devices under this license key? This will allow registering new terminals/devices.'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(confirmCtx), child: const Text('Cancel')),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        Navigator.pop(confirmCtx);
+                                        BuildContext? loadingCtx;
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (lCtx) {
+                                            loadingCtx = lCtx;
+                                            return const Center(child: CircularProgressIndicator(color: Color(0xFFFF6F24)));
+                                          },
+                                        );
+                                        try {
+                                          await state.clearAllDevicesFromLicenseCloud();
+                                        } catch (e) {
+                                          debugPrint('Error clearing device registrations: $e');
+                                        } finally {
+                                          if (loadingCtx != null && loadingCtx!.mounted) {
+                                            Navigator.pop(loadingCtx!);
+                                          }
+                                        }
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('All device registrations cleared successfully.')),
+                                          );
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4444)),
+                                      child: const Text('Clear All'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          });
+                        },
+                        icon: const Icon(Icons.phonelink_erase, size: 16),
+                        label: const Text('Reset All Terminals/Devices', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(color: Colors.redAccent),
+                          minimumSize: const Size.fromHeight(36),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) {
-                              return AlertDialog(
-                                backgroundColor: const Color(0xFF12161B),
-                                title: const Text('Unlink Terminal'),
-                                content: const Text('Are you sure you want to deactivate and unlink this POS terminal? This will log you out of SaaS command synchronization.'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      state.deactivateApp();
-                                      Navigator.pop(context);
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFF4444),
-                                      foregroundColor: Colors.white,
+                          _promptDeveloperPassword(context, () {
+                            showDialog(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  backgroundColor: const Color(0xFF12161B),
+                                  title: const Text('Unlink Terminal'),
+                                  content: const Text('Are you sure you want to deactivate and unlink this POS terminal? This will log you out of SaaS command synchronization.'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        state.deactivateApp();
+                                        Navigator.pop(context);
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFFF4444),
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Unlink'),
                                     ),
-                                    child: const Text('Unlink'),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
+                                  ],
+                                );
+                              },
+                            );
+                          });
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF4444),
@@ -6308,83 +8207,197 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                 ),
                 const SizedBox(height: 24),
 
-                const Text('SaaS License Override', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x0CFFFFFF))),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: saasStatus,
-                        dropdownColor: const Color(0xFF12161B),
-                        decoration: const InputDecoration(labelText: 'SaaS Status'),
-                        items: const [
-                          DropdownMenuItem(value: 'active', child: Text('Active')),
-                          DropdownMenuItem(value: 'paused', child: Text('Paused (Suspended)')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) setState(() => saasStatus = val);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: expiryController,
-                        decoration: const InputDecoration(
-                          labelText: 'SaaS Expiry Date (ISO 8601)',
-                          hintText: 'e.g. 2026-07-10T14:02:19.000',
+                if (isDeveloperMode) ...[
+                  const Text('SaaS License Override', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0x0CFFFFFF))),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: saasStatus,
+                          dropdownColor: const Color(0xFF12161B),
+                          decoration: const InputDecoration(labelText: 'SaaS Status'),
+                          items: const [
+                            DropdownMenuItem(value: 'active', child: Text('Active')),
+                            DropdownMenuItem(value: 'paused', child: Text('Paused (Suspended)')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setState(() => saasStatus = val);
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          final dateStr = expiryController.text.trim();
-                          if (dateStr.isNotEmpty) {
-                            state.updateSaaSLicenseOverride(saasStatus, dateStr);
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SaaS Licensing state updated successfully!')));
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF6F24),
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(40),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: expiryController,
+                          decoration: const InputDecoration(
+                            labelText: 'SaaS Expiry Date (ISO 8601)',
+                            hintText: 'e.g. 2026-07-10T14:02:19.000',
+                          ),
                         ),
-                        child: const Text('Apply SaaS Commands'),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            final dateStr = expiryController.text.trim();
+                            if (dateStr.isNotEmpty) {
+                              state.updateSaaSLicenseOverride(saasStatus, dateStr);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SaaS Licensing state updated successfully!')));
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF6F24),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(40),
+                          ),
+                          child: const Text('Apply SaaS Commands'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 24),
+                ],
 
                 ElevatedButton.icon(
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          backgroundColor: const Color(0xFF12161B),
-                          title: const Text('Factory Reset System'),
-                          content: const Text('WARNING: This will clear all transactions, cashier pins, tables, and settings. Proceed?'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                            ElevatedButton(
-                              onPressed: () {
-                                state.resetSystemData();
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('System factory reset completed.')));
-                                widget.scaffoldKey.currentState?.closeDrawer();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFF4444),
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Reset'),
+                    _promptDeveloperPassword(context, () {
+                      showDialog(
+                        context: context,
+                        builder: (confirmCtx) {
+                          return AlertDialog(
+                            backgroundColor: const Color(0xFF12161B),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0x0CFFFFFF))),
+                            title: const Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                                SizedBox(width: 8),
+                                Text('Zero Out Sales Reports', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              ],
                             ),
-                          ],
-                        );
-                      },
-                    );
+                            content: const Text('WARNING: This will permanently delete all completed invoices and sales reports both locally and from the cloud database. Tables and menu prices will NOT be affected. Proceed?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(confirmCtx), child: const Text('Cancel', style: TextStyle(color: Colors.white70))),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  Navigator.pop(confirmCtx);
+                                  BuildContext? loadingCtx;
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (lCtx) {
+                                      loadingCtx = lCtx;
+                                      return PopScope(
+                                        canPop: false,
+                                        child: AlertDialog(
+                                          backgroundColor: const Color(0xFF1E293B),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          content: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              CircularProgressIndicator(color: Color(0xFFFF6F24)),
+                                              SizedBox(width: 20),
+                                              Expanded(
+                                                child: Text(
+                                                  "Clearing sales reports... please wait",
+                                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                  bool success = false;
+                                  try {
+                                    await state.clearSalesReportsAndSync();
+                                    success = true;
+                                  } catch (e) {
+                                    debugPrint('Error clearing reports: $e');
+                                  } finally {
+                                    if (loadingCtx != null && loadingCtx!.mounted) {
+                                      Navigator.pop(loadingCtx!);
+                                    }
+                                  }
+                                  if (success && context.mounted) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (alertCtx) => AlertDialog(
+                                        backgroundColor: const Color(0xFF1E293B),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        title: const Row(
+                                          children: [
+                                            Icon(Icons.check_circle, color: Colors.green),
+                                            SizedBox(width: 8),
+                                            Text("Success", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                        content: const Text("All sales invoices and reports cleared successfully.", style: TextStyle(color: Colors.white70)),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(alertCtx),
+                                            child: const Text("OK", style: TextStyle(color: Color(0xFFFF6F24), fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } else if (!success && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Failed to clear sales reports. Please check your connection and try again.')),
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF6F24),
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Clear Reports'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    });
+                  },
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('Zero Out Sales Reports', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF9F24),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    _promptDeveloperPassword(context, () {
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            backgroundColor: const Color(0xFF12161B),
+                            title: const Text('Factory Reset System'),
+                            content: const Text('WARNING: This will clear all transactions, cashier pins, tables, and settings. Proceed?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                              ElevatedButton(
+                                onPressed: () {
+                                  state.resetSystemData();
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('System factory reset completed.')));
+                                  widget.scaffoldKey.currentState?.closeDrawer();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF4444),
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Reset'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    });
                   },
                   icon: const Icon(Icons.delete_forever),
                   label: const Text('Clear Cache & Database Reset'),
@@ -7470,12 +9483,40 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
         return false;
       }
     } else {
-      try {
-        final bool isConnected = await PrintBluetoothThermal.connectionStatus;
-        if (isConnected) {
-          // Replace Rupee symbol with Rs. for standard character set compatibility
-          String printableText = invoiceText.replaceAll('₹', 'Rs.');
-          
+      // Replace Rupee symbol with Rs. for standard character set compatibility
+      String printableText = invoiceText.replaceAll('₹', 'Rs.');
+      
+      state.addBtLog('PRINT', 'Print command received. Preparing to send data to Bluetooth printer...', 'APP_SIDE');
+      
+      // Try printing with auto-reconnect (up to 2 attempts: 1 original + 1 retry after reconnect)
+      for (int printAttempt = 1; printAttempt <= 2; printAttempt++) {
+        try {
+          // Check actual BT connection status
+          bool isConnected = false;
+          try {
+            isConnected = await PrintBluetoothThermal.connectionStatus;
+          } catch (_) {
+            state.addBtLog('ERROR', 'Could not check BT connection status before print. BT hardware may be unresponsive.', 'APP_SIDE');
+          }
+
+          // If not connected, try auto-reconnect
+          if (!isConnected) {
+            state.addBtLog('PRINT', 'Printer not connected at print time (attempt $printAttempt). Triggering auto-reconnect...', 'MACHINE_SIDE');
+            final reconnected = await state.ensureBluetoothConnection();
+            if (!reconnected) {
+              state.addBtLog('PRINT', 'Auto-reconnect failed on print attempt $printAttempt. Printer may be OFF, out of range, or battery dead.', 'MACHINE_SIDE');
+              if (printAttempt < 2) {
+                await Future.delayed(const Duration(milliseconds: 800));
+                continue; // Try once more
+              }
+              state.addBtLog('PRINT', 'FAILED: Could not print. All reconnection attempts exhausted. Please check printer hardware.', 'MACHINE_SIDE');
+              return false;
+            }
+            state.addBtLog('PRINT', 'Reconnected successfully. Resuming print...', 'APP_SIDE');
+            // Give the BT stack a moment to stabilize after reconnect
+            await Future.delayed(const Duration(milliseconds: 300));
+          }
+
           // ESC/POS Commands:
           // 1. ESC @ (Initialize printer: 27, 64)
           await PrintBluetoothThermal.writeBytes([27, 64]);
@@ -7491,17 +9532,417 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
           // 3. Print and feed paper (ESC d 4: 27, 100, 4) to roll paper out for tearing
           await PrintBluetoothThermal.writeBytes([27, 100, 4]);
 
-          debugPrint('Real Bluetooth Print Success: $result');
-          return result;
-        } else {
-          debugPrint('Printer not connected.');
+          if (result) {
+            // Sync state: printing succeeded, so we are definitely connected
+            state.isPrinterConnected = true;
+            state.addBtLog('PRINT', 'SUCCESS: Print job completed successfully on attempt $printAttempt.', 'APP_SIDE');
+            return true;
+          } else {
+            state.addBtLog('PRINT', 'Print data was sent but printer returned failure on attempt $printAttempt. Printer may have disconnected mid-transfer or is out of paper.', 'MACHINE_SIDE');
+            // writeString failed - likely a silent disconnect, retry after reconnect
+            if (printAttempt < 2) {
+              state.isPrinterConnected = false;
+              state.addBtLog('PRINT', 'Printer returned failure, will retry after reconnect...', 'MACHINE_SIDE');
+              await Future.delayed(const Duration(milliseconds: 500));
+              continue;
+            }
+            state.addBtLog('PRINT', 'FAILED: Print could not be completed after all attempts. Check printer paper/power.', 'MACHINE_SIDE');
+            return false;
+          }
+        } catch (e) {
+          state.addBtLog('ERROR', 'Bluetooth print error on attempt $printAttempt. Printer may have disconnected abruptly during data transfer.', 'MACHINE_SIDE', error: e.toString());
+          // On error, mark as disconnected and retry
+          state.isPrinterConnected = false;
+          state.addBtLog('PRINT', 'Marking printer as disconnected after error, will retry...', 'MACHINE_SIDE');
+          if (printAttempt < 2) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            continue;
+          }
+          state.addBtLog('PRINT', 'FAILED: Print aborted due to repeated errors. Check if printer turned OFF during print.', 'MACHINE_SIDE');
           return false;
         }
-      } catch (e) {
-        debugPrint('Real Bluetooth Print Error: $e');
-        return false;
       }
+      return false;
     }
+  }
+}
+
+// --- BLUETOOTH DIAGNOSTIC LOGS VIEW ---
+
+class BluetoothLogsView extends StatelessWidget {
+  final GlobalKey<ScaffoldState> scaffoldKey;
+  const BluetoothLogsView({super.key, required this.scaffoldKey});
+
+  IconData _eventIcon(String event) {
+    switch (event) {
+      case 'CONNECT': return Icons.bluetooth_connected;
+      case 'DISCONNECT': return Icons.bluetooth_disabled;
+      case 'PRINT': return Icons.print;
+      case 'SCAN': return Icons.bluetooth_searching;
+      case 'ERROR': return Icons.error_outline;
+      case 'TOGGLE': return Icons.toggle_on;
+      case 'RETRY': return Icons.refresh;
+      case 'AUTO_RECONNECT': return Icons.autorenew;
+      case 'SYNC': return Icons.sync;
+      default: return Icons.info_outline;
+    }
+  }
+
+  Color _eventColor(String event) {
+    switch (event) {
+      case 'CONNECT': return const Color(0xFF4ADE80);      // green
+      case 'DISCONNECT': return const Color(0xFFF87171);    // red
+      case 'PRINT': return const Color(0xFF60A5FA);         // blue
+      case 'SCAN': return const Color(0xFFA78BFA);          // purple
+      case 'ERROR': return const Color(0xFFF97316);         // orange
+      case 'TOGGLE': return const Color(0xFF38BDF8);        // sky
+      case 'RETRY': return const Color(0xFFFBBF24);         // yellow
+      case 'AUTO_RECONNECT': return const Color(0xFFFBBF24);// yellow
+      case 'SYNC': return const Color(0xFF2DD4BF);          // teal
+      default: return Colors.white60;
+    }
+  }
+
+  Color _diagnosisColor(String diagnosis) {
+    switch (diagnosis) {
+      case 'APP_SIDE': return const Color(0xFF60A5FA);      // blue
+      case 'MACHINE_SIDE': return const Color(0xFFF87171);  // red
+      default: return Colors.white38;
+    }
+  }
+
+  String _diagnosisLabel(String diagnosis) {
+    switch (diagnosis) {
+      case 'APP_SIDE': return '📱 APP SIDE';
+      case 'MACHINE_SIDE': return '🖨️ MACHINE SIDE';
+      default: return '❓ UNKNOWN';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppStateProvider.of(context);
+    final logs = state.btLogs;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF12161B),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => state.navigateToView('settings-device'),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.bug_report, color: Color(0xFFFF6F24), size: 22),
+            SizedBox(width: 10),
+            Text('BT Diagnostic Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        actions: [
+          if (logs.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep, color: Color(0xFFF87171)),
+              tooltip: 'Clear All Logs',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: const Color(0xFF12161B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('Clear All Logs?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    content: const Text('This will permanently delete all Bluetooth diagnostic logs.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          state.clearBtLogs();
+                          Navigator.pop(ctx);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF87171),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Status Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0D1117),
+              border: Border(bottom: BorderSide(color: Color(0xFF1E293B), width: 1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: state.isPrinterConnected ? const Color(0xFF4ADE80) : const Color(0xFFF87171),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (state.isPrinterConnected ? const Color(0xFF4ADE80) : const Color(0xFFF87171)).withValues(alpha: 0.5),
+                            blurRadius: 6,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      state.isPrinterConnected ? 'CONNECTED' : 'DISCONNECTED',
+                      style: TextStyle(
+                        color: state.isPrinterConnected ? const Color(0xFF4ADE80) : const Color(0xFFF87171),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${logs.length} events',
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  state.connectedPrinterName.isEmpty ? 'No printer selected' : '${state.connectedPrinterName} (${state.connectedPrinterMac})',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                ),
+                const SizedBox(height: 12),
+                // Legend
+                const Wrap(
+                  spacing: 16,
+                  runSpacing: 6,
+                  children: [
+                    _LegendChip(color: Color(0xFF60A5FA), label: '📱 APP SIDE'),
+                    _LegendChip(color: Color(0xFFF87171), label: '🖨️ MACHINE SIDE'),
+                  ],
+                ),
+                const Divider(color: Color(0xFF1E293B), height: 24),
+                // Cloud Sync Section
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'License Key: ${state.saasLicenseKey}',
+                            style: const TextStyle(color: Color(0xFFFF6F24), fontSize: 11.5, fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Device ID: ${state.getOrCreateDeviceId()}',
+                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontFamily: 'monospace'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.cloud_upload, size: 16, color: Colors.white),
+                      label: const Text('Backup Data', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () async {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Uploading local database backup to cloud...')),
+                        );
+                        await state.pushLocalDataToCloud();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Backup complete! Data saved to Firestore.')),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E293B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Color(0xFFFF6F24), width: 0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Log List
+          Expanded(
+            child: logs.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.receipt_long, size: 56, color: Color(0xFF334155)),
+                        SizedBox(height: 16),
+                        Text('No logs yet', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 16, fontWeight: FontWeight.w500)),
+                        SizedBox(height: 6),
+                        Text('Bluetooth events will appear here as\nthey happen (connect, print, errors, etc.)',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: logs.length,
+                    itemBuilder: (context, index) {
+                      final log = logs[index];
+                      final evColor = _eventColor(log.event);
+                      final diagColor = _diagnosisColor(log.diagnosis);
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111827),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: log.event == 'ERROR' ? const Color(0x33F97316) : const Color(0x0CFFFFFF),
+                            width: log.event == 'ERROR' ? 1.2 : 0.8,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header row: event icon + event name + timestamp
+                            Row(
+                              children: [
+                                Icon(_eventIcon(log.event), color: evColor, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  log.event,
+                                  style: TextStyle(
+                                    color: evColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '${log.formattedTime}  ${log.formattedDate}',
+                                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontFamily: 'monospace'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            // Message
+                            Text(
+                              log.message,
+                              style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                            ),
+                            const SizedBox(height: 8),
+                            // Diagnosis badge + MAC
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: diagColor.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: diagColor.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    _diagnosisLabel(log.diagnosis),
+                                    style: TextStyle(color: diagColor, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                if (log.macAddress != null && log.macAddress!.isNotEmpty) ...[
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    log.macAddress!,
+                                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 10.5, fontFamily: 'monospace'),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            // Error details (if present)
+                            if (log.errorDetail != null && log.errorDetail!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0x1AF97316),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0x33F97316)),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.code, size: 14, color: Color(0xFFF97316)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        log.errorDetail!,
+                                        style: const TextStyle(
+                                          color: Color(0xFFFBBF24),
+                                          fontSize: 11,
+                                          fontFamily: 'monospace',
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendChip extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendChip({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+        ),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500)),
+      ],
+    );
   }
 }
 
@@ -8094,6 +10535,135 @@ class _SecretLedgerViewState extends State<SecretLedgerView> {
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+            // Zero Out Card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0x7F191E28),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0x0CFFFFFF)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Factory Reset Sales Ledger', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Clear all invoices and sales data to prepare a fresh APK for a client. Menu rate list prices will remain unchanged.',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (confirmCtx) {
+                          return AlertDialog(
+                            backgroundColor: const Color(0xFF12161B),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0x0CFFFFFF))),
+                            title: const Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                                SizedBox(width: 8),
+                                Text('Zero Out Sales Reports', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              ],
+                            ),
+                            content: const Text('WARNING: This will permanently delete all completed invoices and sales reports both locally and from the cloud database. Tables and menu prices will NOT be affected. Proceed?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(confirmCtx), child: const Text('Cancel', style: TextStyle(color: Colors.white70))),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  Navigator.pop(confirmCtx);
+                                  BuildContext? loadingCtx;
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (lCtx) {
+                                      loadingCtx = lCtx;
+                                      return PopScope(
+                                        canPop: false,
+                                        child: AlertDialog(
+                                          backgroundColor: const Color(0xFF1E293B),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          content: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              CircularProgressIndicator(color: Color(0xFFFF6F24)),
+                                              SizedBox(width: 20),
+                                              Expanded(
+                                                child: Text(
+                                                  "Clearing sales reports... please wait",
+                                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                  bool success = false;
+                                  try {
+                                    await state.clearSalesReportsAndSync();
+                                    success = true;
+                                  } catch (e) {
+                                    debugPrint('Error clearing reports: $e');
+                                  } finally {
+                                    if (loadingCtx != null && loadingCtx!.mounted) {
+                                      Navigator.pop(loadingCtx!);
+                                    }
+                                  }
+                                  if (success && context.mounted) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (alertCtx) => AlertDialog(
+                                        backgroundColor: const Color(0xFF1E293B),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        title: const Row(
+                                          children: [
+                                            Icon(Icons.check_circle, color: Colors.green),
+                                            SizedBox(width: 8),
+                                            Text("Success", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                        content: const Text("All sales invoices and reports cleared successfully.", style: TextStyle(color: Colors.white70)),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(alertCtx),
+                                            child: const Text("OK", style: TextStyle(color: Color(0xFFFF6F24), fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } else if (!success && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Failed to clear sales reports. Please check your connection and try again.')),
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF6F24),
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Clear Reports'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    label: const Text('Zero Out Sales Reports', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4444),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Invoices List Section
@@ -8251,6 +10821,7 @@ class SecretInvoiceEditDialog extends StatefulWidget {
 class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
   late List<CartItem> _items;
   late int _packaging;
+  late double _discountPercent;
   final _scaleController = TextEditingController();
 
   @override
@@ -8265,6 +10836,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
       gstRate: i.gstRate,
     )).toList();
     _packaging = widget.invoice.packaging;
+    _discountPercent = widget.invoice.discountPercent;
   }
 
   @override
@@ -8273,8 +10845,31 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
     super.dispose();
   }
 
-  int get _subtotal => _items.fold(0, (sum, i) => sum + (i.price * i.qty));
-  int get _gst => _items.fold(0, (sum, i) => sum + (i.price * i.qty * (i.gstRate / 100)).round());
+  int get _subtotal {
+    final discountRatio = 1.0 - (_discountPercent / 100.0);
+    if (widget.state.isGstInclusive) {
+      return _items.fold(0, (sum, item) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+        return sum + (totalItemPrice - gstAmount);
+      });
+    } else {
+      return _items.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio).round());
+    }
+  }
+
+  int get _gst {
+    final discountRatio = 1.0 - (_discountPercent / 100.0);
+    if (widget.state.isGstInclusive) {
+      return _items.fold(0, (sum, item) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+      });
+    } else {
+      return _items.fold(0, (sum, item) => sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round());
+    }
+  }
+
   int get _total => _subtotal + _gst + _packaging;
 
   void _smartScaleInvoice(int targetTotal) {
@@ -8293,8 +10888,28 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
       gstRate: item.gstRate,
     )).toList();
 
-    int currentSubtotal = adjusted.fold(0, (sum, item) => sum + (item.price * item.qty));
-    int currentGst = adjusted.fold(0, (sum, item) => sum + (item.price * item.qty * (item.gstRate / 100)).round());
+    final isInclusive = widget.state.isGstInclusive;
+    final discountRatio = 1.0 - (_discountPercent / 100.0);
+
+    int currentSubtotal = adjusted.fold(0, (sum, item) {
+      if (isInclusive) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+        return sum + (totalItemPrice - gstAmount);
+      } else {
+        return sum + (item.price * item.qty * discountRatio).round();
+      }
+    });
+
+    int currentGst = adjusted.fold(0, (sum, item) {
+      if (isInclusive) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+      } else {
+        return sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round();
+      }
+    });
+
     int currentTotal = currentSubtotal + currentGst;
 
     if (currentTotal <= 0) return;
@@ -8308,8 +10923,25 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
 
     adjusted.removeWhere((item) => item.qty == 0);
 
-    currentSubtotal = adjusted.fold(0, (sum, item) => sum + (item.price * item.qty));
-    currentGst = adjusted.fold(0, (sum, item) => sum + (item.price * item.qty * (item.gstRate / 100)).round());
+    currentSubtotal = adjusted.fold(0, (sum, item) {
+      if (isInclusive) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+        return sum + (totalItemPrice - gstAmount);
+      } else {
+        return sum + (item.price * item.qty * discountRatio).round();
+      }
+    });
+
+    currentGst = adjusted.fold(0, (sum, item) {
+      if (isInclusive) {
+        final totalItemPrice = (item.price * item.qty * discountRatio).round();
+        return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+      } else {
+        return sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round();
+      }
+    });
+
     currentTotal = currentSubtotal + currentGst;
 
     bool reduced = true;
@@ -8335,23 +10967,60 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
           adjusted.remove(itemToReduce);
           reduced = true;
         }
-        currentSubtotal = adjusted.isEmpty ? 0 : adjusted.fold(0, (sum, item) => sum + (item.price * item.qty));
-        currentGst = adjusted.isEmpty ? 0 : adjusted.fold(0, (sum, item) => sum + (item.price * item.qty * (item.gstRate / 100)).round());
+        currentSubtotal = adjusted.isEmpty
+            ? 0
+            : adjusted.fold(0, (sum, item) {
+                if (isInclusive) {
+                  final totalItemPrice = (item.price * item.qty * discountRatio).round();
+                  final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+                  return sum + (totalItemPrice - gstAmount);
+                } else {
+                  return sum + (item.price * item.qty * discountRatio).round();
+                }
+              });
+        currentGst = adjusted.isEmpty
+            ? 0
+            : adjusted.fold(0, (sum, item) {
+                if (isInclusive) {
+                  final totalItemPrice = (item.price * item.qty * discountRatio).round();
+                  return sum + (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
+                } else {
+                  return sum + (item.price * item.qty * discountRatio * (item.gstRate / 100.0)).round();
+                }
+              });
         currentTotal = currentSubtotal + currentGst;
       }
     }
 
     if (adjusted.isNotEmpty && currentTotal != targetSubtotalGst) {
       final item = adjusted.first;
-      int otherSubtotal = adjusted.skip(1).fold(0, (sum, i) => sum + (i.price * i.qty));
-      int otherGst = adjusted.skip(1).fold(0, (sum, i) => sum + (i.price * i.qty * (i.gstRate / 100)).round());
+      int otherSubtotal = adjusted.skip(1).fold(0, (sum, i) {
+        if (isInclusive) {
+          final totalItemPrice = (i.price * i.qty * discountRatio).round();
+          final gstAmount = (totalItemPrice * i.gstRate / (100 + i.gstRate)).round();
+          return sum + (totalItemPrice - gstAmount);
+        } else {
+          return sum + (i.price * i.qty * discountRatio).round();
+        }
+      });
+      int otherGst = adjusted.skip(1).fold(0, (sum, i) {
+        if (isInclusive) {
+          final totalItemPrice = (i.price * i.qty * discountRatio).round();
+          return sum + (totalItemPrice * i.gstRate / (100 + i.gstRate)).round();
+        } else {
+          return sum + (i.price * i.qty * discountRatio * (i.gstRate / 100.0)).round();
+        }
+      });
       int otherTotal = otherSubtotal + otherGst;
 
       int targetForThisItem = targetSubtotalGst - otherTotal;
       if (targetForThisItem > 0) {
         int bestPrice = 0;
         for (int p = 0; p <= targetForThisItem; p++) {
-          final calcTotal = (p * item.qty) + ((p * item.qty) * item.gstRate / 100).round();
+          final discountedPrice = (p * item.qty * discountRatio).round();
+          final calcTotal = isInclusive
+              ? discountedPrice
+              : discountedPrice + (discountedPrice * item.gstRate / 100.0).round();
           if (calcTotal <= targetForThisItem) {
             bestPrice = p;
           } else {
@@ -8613,9 +11282,49 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
               ),
               
               const SizedBox(height: 16),
+              const Text('Discount Percentage (%)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  hintText: 'Discount percentage...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  fillColor: const Color(0x0CFFFFFF),
+                  filled: true,
+                ),
+                controller: TextEditingController(text: '$_discountPercent')..selection = TextSelection.fromPosition(TextPosition(offset: '$_discountPercent'.length)),
+                onChanged: (val) {
+                  final parsed = double.tryParse(val.trim());
+                  if (parsed != null && parsed >= 0 && parsed <= 100) {
+                    setState(() {
+                      _discountPercent = parsed;
+                    });
+                  }
+                },
+              ),
+              
+              const SizedBox(height: 16),
               const Divider(color: Color(0x14FFFFFF)),
               const SizedBox(height: 12),
               
+              if (_discountPercent > 0) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Items Total', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+                    Text('₹${_items.fold<int>(0, (sum, item) => sum + (item.price * item.qty))}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Discount (${_discountPercent.toStringAsFixed(0)}%)', style: const TextStyle(color: Color(0xFF10B981), fontSize: 13)),
+                    Text('-₹${(_items.fold<int>(0, (sum, item) => sum + (item.price * item.qty)) * _discountPercent / 100).round()}', style: const TextStyle(color: Color(0xFF10B981), fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -8624,14 +11333,24 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                 ],
               ),
               const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('GST (5%)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
-                  Text('₹$_gst', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 6),
+              if (widget.state.showGstOnBills && _gst > 0) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('CGST', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+                    Text('₹${(_gst / 2.0).toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('SGST', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+                    Text('₹${(_gst / 2.0).toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -8660,6 +11379,31 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
           children: [
             TextButton.icon(
               onPressed: () {
+                if (widget.state.invoices.isNotEmpty && widget.state.invoices.first.id != widget.invoice.id) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: const Color(0xFF12161B),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: Color(0x0CFFFFFF)),
+                      ),
+                      title: const Text('Delete Blocked', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.amber)),
+                      content: const Text(
+                        'You can only delete the most recent bill (the last one generated) to prevent gaps in billing numbers.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('OK', style: TextStyle(color: Color(0xFFFF6F24))),
+                        ),
+                      ],
+                    ),
+                  );
+                  return;
+                }
+
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
@@ -8669,7 +11413,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                       side: const BorderSide(color: Color(0x0CFFFFFF)),
                     ),
                     title: const Text('Delete Invoice', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
-                    content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? The invoice sequence will be automatically rebuilt to leave no gaps.', style: const TextStyle(fontSize: 13)),
+                    content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? This will permanently delete this record and reset the sequence number count.', style: const TextStyle(fontSize: 13)),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx),
@@ -8679,13 +11423,22 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                         onPressed: () {
                           Navigator.pop(ctx); // pop confirmation
                           Navigator.pop(context); // pop edit dialog
-                          widget.state.deleteInvoice(widget.invoice.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Invoice ${widget.invoice.id} deleted. Sequence updated.'),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
+                          final success = widget.state.deleteInvoice(widget.invoice.id);
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Invoice ${widget.invoice.id} deleted successfully.'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Error: Could not delete invoice.'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          }
                         },
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
                         child: const Text('Delete'),
@@ -8719,6 +11472,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                             packaging: _packaging,
                             total: _total,
                             originalTotal: widget.invoice.originalTotal ?? widget.invoice.total,
+                            discountPercent: _discountPercent,
                           );
                           widget.state.updateInvoice(updatedInv);
                           Navigator.pop(context);

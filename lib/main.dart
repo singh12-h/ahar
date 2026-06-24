@@ -1161,23 +1161,27 @@ class SidebarDrawer extends StatelessWidget {
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: ListTile(
-                    visualDensity: VisualDensity.compact,
-                    leading: const Icon(Icons.logout, color: Color(0xFFEF4444), size: 20),
-                    title: const Text(
-                      'Logout Shift',
-                      style: TextStyle(
-                        color: Color(0xFFEF4444),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13.5,
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ListTile(
+                      visualDensity: VisualDensity.compact,
+                      leading: const Icon(Icons.logout, color: Color(0xFFEF4444), size: 20),
+                      title: const Text(
+                        'Logout Shift',
+                        style: TextStyle(
+                          color: Color(0xFFEF4444),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13.5,
+                        ),
                       ),
+                      onTap: () {
+                        if (!isPersistent) {
+                          Navigator.pop(context);
+                        }
+                        state.logoutUser();
+                      },
                     ),
-                    onTap: () {
-                      if (!isPersistent) {
-                        Navigator.pop(context);
-                      }
-                      state.logoutUser();
-                    },
                   ),
                 ),
                 const Padding(
@@ -1190,26 +1194,30 @@ class SidebarDrawer extends StatelessWidget {
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: ListTile(
-                    visualDensity: VisualDensity.compact,
-                    leading: const Icon(Icons.support_agent_outlined, color: Color(0xFF94A3B8), size: 20),
-                    title: const Text(
-                      'Get Support',
-                      style: TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13.5,
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ListTile(
+                      visualDensity: VisualDensity.compact,
+                      leading: const Icon(Icons.support_agent_outlined, color: Color(0xFF94A3B8), size: 20),
+                      title: const Text(
+                        'Get Support',
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13.5,
+                        ),
                       ),
+                      onTap: () {
+                        if (!isPersistent) {
+                          Navigator.pop(context);
+                        }
+                        showDialog(
+                          context: context,
+                          builder: (context) => const SupportDialog(),
+                        );
+                      },
                     ),
-                    onTap: () {
-                      if (!isPersistent) {
-                        Navigator.pop(context);
-                      }
-                      showDialog(
-                        context: context,
-                        builder: (context) => const SupportDialog(),
-                      );
-                    },
                   ),
                 ),
               ],
@@ -1338,24 +1346,28 @@ class SidebarDrawer extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: isActive ? Border.all(color: activeColor.withOpacity(0.25)) : null,
       ),
-      child: ListTile(
-        visualDensity: VisualDensity.compact,
-        leading: Icon(icon, color: isActive ? activeColor : const Color(0xFF94A3B8), size: 20),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isActive ? activeColor : const Color(0xFF94A3B8),
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            fontSize: 13.5,
-            letterSpacing: 0.3,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: ListTile(
+          visualDensity: VisualDensity.compact,
+          leading: Icon(icon, color: isActive ? activeColor : const Color(0xFF94A3B8), size: 20),
+          title: Text(
+            title,
+            style: TextStyle(
+              color: isActive ? activeColor : const Color(0xFF94A3B8),
+              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+              fontSize: 13.5,
+              letterSpacing: 0.3,
+            ),
           ),
+          onTap: () {
+            state.navigateToView(viewId);
+            if (!isPersistent) {
+              Navigator.pop(context);
+            }
+          },
         ),
-        onTap: () {
-          state.navigateToView(viewId);
-          if (!isPersistent) {
-            Navigator.pop(context);
-          }
-        },
       ),
     );
   }
@@ -1373,9 +1385,10 @@ class SupportDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: const Color(0xFF12161B),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        constraints: const BoxConstraints(maxWidth: 400),
+      child: SingleChildScrollView(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 400),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1503,8 +1516,9 @@ class SupportDialog extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 // --- VIEW: SEATING GRID LAYOUT VIEW ---
@@ -1595,34 +1609,36 @@ class _SeatingGridViewState extends State<SeatingGridView> {
                   Text('Manager Authorization', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Please enter the manager security PIN to access the audit panel.',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: pinController,
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(
-                      labelText: 'Security PIN',
-                      counterText: '',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.lock_outline),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Please enter the manager security PIN to access the audit panel.',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
                     ),
-                  ),
-                  if (errorMsg.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      errorMsg,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: pinController,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      decoration: InputDecoration(
+                        labelText: 'Security PIN',
+                        counterText: '',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                      ),
                     ),
-                  ]
-                ],
+                    if (errorMsg.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorMsg,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ]
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -1803,36 +1819,38 @@ class _SeatingGridViewState extends State<SeatingGridView> {
               backgroundColor: const Color(0xFF12161B),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0x0CFFFFFF))),
               title: const Text('Add Table/Parcel', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Table/Parcel Name',
-                      hintText: 'e.g. Table E1, PARCEL 6',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Table/Parcel Name',
+                        hintText: 'e.g. Table E1, PARCEL 6',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: tableType,
-                    dropdownColor: const Color(0xFF12161B),
-                    decoration: InputDecoration(
-                      labelText: 'Type',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: tableType,
+                      dropdownColor: const Color(0xFF12161B),
+                      decoration: InputDecoration(
+                        labelText: 'Type',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'table', child: Text('Table')),
+                        DropdownMenuItem(value: 'parcel', child: Text('Parcel')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => tableType = val);
+                        }
+                      },
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'table', child: Text('Table')),
-                      DropdownMenuItem(value: 'parcel', child: Text('Parcel')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => tableType = val);
-                      }
-                    },
-                  ),
-                ],
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -2541,35 +2559,39 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
                       borderRadius: BorderRadius.circular(10),
                       border: isActive ? Border.all(color: const Color(0x2BFF6F24)) : null,
                     ),
-                    child: ListTile(
-                      title: Text(
-                        cat,
-                        style: TextStyle(
-                          color: isActive ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8),
-                          fontSize: 13.5,
-                          fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                        ),
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          gradient: isActive ? const LinearGradient(colors: [Color(0xFFFF6F24), Color(0xFFE6550F)]) : null,
-                          color: isActive ? null : Colors.white10,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '$count',
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      child: ListTile(
+                        title: Text(
+                          cat,
                           style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                            color: isActive ? const Color(0xFFFF6F24) : const Color(0xFF94A3B8),
+                            fontSize: 13.5,
+                            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
                           ),
                         ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            gradient: isActive ? const LinearGradient(colors: [Color(0xFFFF6F24), Color(0xFFE6550F)]) : null,
+                            color: isActive ? null : Colors.white10,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '$count',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                        onTap: () {
+                          state.selectCategory(cat);
+                          Navigator.pop(context);
+                        },
                       ),
-                      onTap: () {
-                        state.selectCategory(cat);
-                        Navigator.pop(context);
-                      },
                     ),
                   );
                 },
@@ -2942,19 +2964,25 @@ class CartDrawer extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Discount (% Off)', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildDiscountButton(state, 0),
-                          const SizedBox(width: 4),
-                          _buildDiscountButton(state, 5),
-                          const SizedBox(width: 4),
-                          _buildDiscountButton(state, 10),
-                          const SizedBox(width: 4),
-                          _buildDiscountButton(state, 15),
-                          const SizedBox(width: 4),
-                          _buildDiscountCustomButton(context, state),
-                        ],
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildDiscountButton(state, 0),
+                              const SizedBox(width: 4),
+                              _buildDiscountButton(state, 5),
+                              const SizedBox(width: 4),
+                              _buildDiscountButton(state, 10),
+                              const SizedBox(width: 4),
+                              _buildDiscountButton(state, 15),
+                              const SizedBox(width: 4),
+                              _buildDiscountCustomButton(context, state),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -3386,7 +3414,14 @@ class InvoicesListView extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Past Orders & Invoices', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Expanded(
+                      child: Text(
+                        'Past Orders & Invoices',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     if (state.activeInvoiceFilter != null)
                       InputChip(
                         label: Text(
@@ -3963,7 +3998,14 @@ class _MenuReportViewState extends State<MenuReportView> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Dish Sales Performance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Expanded(
+                          child: Text(
+                            'Dish Sales Performance',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         if (_filter == 'custom')
                           TextButton.icon(
                             onPressed: _selectCustomDateRange,
@@ -4101,23 +4143,25 @@ class AccountsReportView extends StatelessWidget {
         title: const Text('Accounts Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
       ),
       body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
           child: Container(
+            constraints: const BoxConstraints(maxWidth: 600),
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Financial Accounts Statement', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                _buildStatementRow('Cash Desk Ledger', '₹$gross', color: const Color(0xFF00AA4F)),
-                _buildStatementRow('Outstanding Receivables', '₹0', color: const Color(0xFFF59E0B)),
-                _buildStatementRow('Tax Liability (GST Account)', '₹$gstSum'),
-                _buildStatementRow('Direct Expense (Delivery Outflow)', '₹$delSum', color: const Color(0xFFFF4444)),
-              ],
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Financial Accounts Statement', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  _buildStatementRow('Cash Desk Ledger', '₹$gross', color: const Color(0xFF00AA4F)),
+                  _buildStatementRow('Outstanding Receivables', '₹0', color: const Color(0xFFF59E0B)),
+                  _buildStatementRow('Tax Liability (GST Account)', '₹$gstSum'),
+                  _buildStatementRow('Direct Expense (Delivery Outflow)', '₹$delSum', color: const Color(0xFFFF4444)),
+                ],
+              ),
             ),
           ),
         ),
@@ -4132,7 +4176,13 @@ class AccountsReportView extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 13.5, color: Color(0xFF94A3B8))),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13.5, color: Color(0xFF94A3B8)),
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(
             value,
             style: TextStyle(
@@ -4393,7 +4443,10 @@ class _TableReportViewState extends State<TableReportView> {
                                 width: 1.2,
                               ),
                             ),
-                            child: ListTile(
+                            child: Material(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                              child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               title: Row(
                                 children: [
@@ -4503,7 +4556,8 @@ class _TableReportViewState extends State<TableReportView> {
                                 );
                               },
                             ),
-                          );
+                          ),
+                        );
                         },
                       ),
               ),
@@ -4525,6 +4579,7 @@ class _TableReportViewState extends State<TableReportView> {
     String? occupiedTimeStr, {
     bool isLiveMode = false,
   }) {
+    final state = AppStateProvider.of(context);
     final sortedItems = itemsMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
     String liveDuration = '';
@@ -4662,28 +4717,34 @@ class _TableReportViewState extends State<TableReportView> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        Column(
-                          children: [
-                            const Text('Occupied Count', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                            const SizedBox(height: 4),
-                            Text('$occupiedCount times', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                          ],
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('Occupied Count', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)), textAlign: TextAlign.center),
+                              const SizedBox(height: 4),
+                              Text('$occupiedCount times', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                            ],
+                          ),
                         ),
                         Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
-                        Column(
-                          children: [
-                            const Text('Total Revenue', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                            const SizedBox(height: 4),
-                            Text('₹$totalRevenue', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
-                          ],
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('Total Revenue', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)), textAlign: TextAlign.center),
+                              const SizedBox(height: 4),
+                              Text('₹$totalRevenue', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)), textAlign: TextAlign.center),
+                            ],
+                          ),
                         ),
                         Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
-                        Column(
-                          children: [
-                            const Text('Avg Order Value', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                            const SizedBox(height: 4),
-                            Text('₹${occupiedCount > 0 ? (totalRevenue / occupiedCount).round() : 0}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                          ],
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('Avg Order Value', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)), textAlign: TextAlign.center),
+                              const SizedBox(height: 4),
+                              Text('₹${occupiedCount > 0 ? (totalRevenue / occupiedCount).round() : 0}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -4691,7 +4752,26 @@ class _TableReportViewState extends State<TableReportView> {
                     const Divider(color: Color(0x14FFFFFF)),
                     const SizedBox(height: 8),
 
-                    const Text('Items Ordered on this Table', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text(
+                      'Items Ordered on this Table',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: const Color(0xFF22C55E), // Vibrant Green
+                        shadows: [
+                          Shadow(
+                            offset: const Offset(1, 1),
+                            color: Colors.black.withOpacity(0.9),
+                            blurRadius: 2,
+                          ),
+                          Shadow(
+                            offset: const Offset(2, 2),
+                            color: const Color(0xFF22C55E).withOpacity(0.3),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     if (sortedItems.isEmpty)
                       const Padding(
@@ -4703,6 +4783,12 @@ class _TableReportViewState extends State<TableReportView> {
                     else
                       Column(
                         children: sortedItems.map((entry) {
+                          final menuItem = state.menu.firstWhere(
+                            (m) => m.name == entry.key,
+                            orElse: () => MenuItem(id: 0, name: entry.key, price: 0, category: ''),
+                          );
+                          final price = menuItem.price;
+
                           return Container(
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             padding: const EdgeInsets.all(10),
@@ -4711,10 +4797,32 @@ class _TableReportViewState extends State<TableReportView> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(entry.key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                                Text('${entry.value} units', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                                Expanded(
+                                  child: Text(
+                                    entry.key,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFFACC15), // Highlighter Yellow
+                                      shadows: [
+                                        Shadow(
+                                          color: Color(0x33FACC15),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${entry.value} x ₹$price',
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                                ),
+                                const SizedBox(width: 16),
+                                Text(
+                                  '₹${entry.value * price}',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
+                                ),
                               ],
                             ),
                           );
@@ -4724,7 +4832,26 @@ class _TableReportViewState extends State<TableReportView> {
                     const Divider(color: Color(0x14FFFFFF)),
                     const SizedBox(height: 8),
 
-                    const Text('Recent Bills & Sessions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text(
+                      'Recent Bills & Sessions',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: const Color(0xFF22C55E), // Vibrant Green
+                        shadows: [
+                          Shadow(
+                            offset: const Offset(1, 1),
+                            color: Colors.black.withOpacity(0.9),
+                            blurRadius: 2,
+                          ),
+                          Shadow(
+                            offset: const Offset(2, 2),
+                            color: const Color(0xFF22C55E).withOpacity(0.3),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     if (invoices.isEmpty)
                       const Padding(
@@ -4749,8 +4876,11 @@ class _TableReportViewState extends State<TableReportView> {
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(color: const Color(0x0CFFFFFF)),
                               ),
-                              child: ExpansionTile(
-                                dense: true,
+                              child: Material(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                child: ExpansionTile(
+                                  dense: true,
                                 iconColor: const Color(0xFF8B5CF6),
                                 tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                                 childrenPadding: const EdgeInsets.all(12).copyWith(top: 0),
@@ -4819,8 +4949,9 @@ class _TableReportViewState extends State<TableReportView> {
                                   ),
                                 ],
                               ),
-                            );
-                          }).toList(),
+                            ),
+                          );
+                        }).toList(),
                         ),
                       ),
                   ],
@@ -5156,7 +5287,7 @@ class _NewItemScreenState extends State<NewItemScreen> {
   final _priceController = TextEditingController();
   final _customGstController = TextEditingController();
   bool _isCustomGst = false;
-  String _categoryVal = 'Sandwich AC';
+  String _categoryVal = 'PAPER DHOSA';
   bool _isVeg = true;
   int _gstRate = 5;
 
@@ -5567,7 +5698,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   final _priceController = TextEditingController();
   final _customGstController = TextEditingController();
   bool _isCustomGst = false;
-  String _categoryVal = 'Sandwich AC';
+  String _categoryVal = 'PAPER DHOSA';
   bool _isVeg = true;
   int _gstRate = 5;
 
@@ -6112,50 +6243,52 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
         ],
       ),
       body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Category Name
-              _buildField(
-                label: 'Category Name',
-                controller: _nameController,
-                hint: 'e.g. Sandwich AC',
-                subtext: 'Category is a placeholder for Menu items',
-              ),
-              const SizedBox(height: 24),
-
-              // Serial Number
-              _buildField(
-                label: 'Serial Number',
-                controller: _serialController,
-                hint: 'e.g. 1',
-                keyboardType: TextInputType.number,
-                subtext: 'Serial No determines the position of Category',
-              ),
-              const SizedBox(height: 32),
-
-              // Bottom Save Button
-              ElevatedButton.icon(
-                onPressed: _saveCategory,
-                icon: const Icon(Icons.save, size: 20),
-                label: const Text(
-                  'Save Category',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        child: SingleChildScrollView(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Category Name
+                _buildField(
+                  label: 'Category Name',
+                  controller: _nameController,
+                  hint: 'e.g. PAPER DHOSA',
+                  subtext: 'Category is a placeholder for Menu items',
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E293B),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    side: const BorderSide(color: Color(0x1AFFFFFF)),
+                const SizedBox(height: 24),
+
+                // Serial Number
+                _buildField(
+                  label: 'Serial Number',
+                  controller: _serialController,
+                  hint: 'e.g. 1',
+                  keyboardType: TextInputType.number,
+                  subtext: 'Serial No determines the position of Category',
+                ),
+                const SizedBox(height: 32),
+
+                // Bottom Save Button
+                ElevatedButton.icon(
+                  onPressed: _saveCategory,
+                  icon: const Icon(Icons.save, size: 20),
+                  label: const Text(
+                    'Save Category',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      side: const BorderSide(color: Color(0x1AFFFFFF)),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -6538,94 +6671,100 @@ class _DevicePlaceholderViewState extends State<DevicePlaceholderView> {
               ),
               content: SizedBox(
                 width: double.maxFinite,
-                child: !state.isBluetoothEnabled
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.bluetooth_disabled, color: Colors.redAccent, size: 40),
-                          const SizedBox(height: 12),
-                          const Text('Bluetooth is turned off', style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          const Text('Please enable Bluetooth in your device settings.', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: () async {
-                              await _requestBluetoothPermissions(state);
-                              setDialogState(() {});
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF6F24),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: const Text('Retry Scan'),
-                          )
-                        ],
-                      )
-                    : state.availablePrinters.isEmpty
-                        ? Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.bluetooth_disabled, color: Colors.white24, size: 40),
-                              const SizedBox(height: 12),
-                              const Text('No paired printers found', style: TextStyle(color: Colors.white60, fontSize: 13)),
-                              const SizedBox(height: 12),
-                              ElevatedButton(
-                                onPressed: () async {
-                                  await _requestBluetoothPermissions(state);
-                                  setDialogState(() {});
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFF6F24),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                child: SingleChildScrollView(
+                  child: !state.isBluetoothEnabled
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bluetooth_disabled, color: Colors.redAccent, size: 40),
+                            const SizedBox(height: 12),
+                            const Text('Bluetooth is turned off', style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            const Text('Please enable Bluetooth in your device settings.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () async {
+                                await _requestBluetoothPermissions(state);
+                                setDialogState(() {});
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF6F24),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: const Text('Retry Scan'),
+                            )
+                          ],
+                        )
+                      : state.availablePrinters.isEmpty
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.bluetooth_disabled, color: Colors.white24, size: 40),
+                                const SizedBox(height: 12),
+                                const Text('No paired printers found', style: TextStyle(color: Colors.white60, fontSize: 13)),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    await _requestBluetoothPermissions(state);
+                                    setDialogState(() {});
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFF6F24),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  child: const Text('Scan Devices'),
                                 ),
-                                child: const Text('Scan Devices'),
-                              ),
-                            ],
-                          )
-
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: state.availablePrinters.length,
-                        itemBuilder: (context, idx) {
-                          final printer = state.availablePrinters[idx];
-                          final isCurrent = state.connectedPrinterMac == printer.macAdress;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isCurrent ? const Color(0x1AFFFFFF) : Colors.black12,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isCurrent ? const Color(0xFFFF6F24) : Colors.white10,
-                              ),
-                            ),
-                            child: ListTile(
-                              dense: true,
-                              leading: const Icon(Icons.print, color: Colors.white60, size: 18),
-                              title: Text(
-                                printer.name.isNotEmpty ? printer.name : 'Unknown Device',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              subtitle: Text(printer.macAdress, style: const TextStyle(fontSize: 11, color: Colors.white38)),
-                              trailing: isCurrent
-                                  ? const Icon(Icons.check_circle, color: Color(0xFF00AA4F), size: 18)
-                                  : null,
-                              onTap: () async {
-                                Navigator.pop(context);
-                                bool success = await state.connectToBluetoothPrinter(printer.macAdress, printer.name);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(success
-                                          ? 'Connected to ${printer.name}!'
-                                          : 'Failed to connect to ${printer.name}.'),
+                              ],
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: state.availablePrinters.length,
+                              itemBuilder: (context, idx) {
+                                final printer = state.availablePrinters[idx];
+                                final isCurrent = state.connectedPrinterMac == printer.macAdress;
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isCurrent ? const Color(0x1AFFFFFF) : Colors.black12,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isCurrent ? const Color(0xFFFF6F24) : Colors.white10,
                                     ),
-                                  );
-                                }
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: ListTile(
+                                      dense: true,
+                                      leading: const Icon(Icons.print, color: Colors.white60, size: 18),
+                                      title: Text(
+                                        printer.name.isNotEmpty ? printer.name : 'Unknown Device',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                      subtitle: Text(printer.macAdress, style: const TextStyle(fontSize: 11, color: Colors.white38)),
+                                      trailing: isCurrent
+                                          ? const Icon(Icons.check_circle, color: Color(0xFF00AA4F), size: 18)
+                                          : null,
+                                      onTap: () async {
+                                        Navigator.pop(context);
+                                        bool success = await state.connectToBluetoothPrinter(printer.macAdress, printer.name);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(success
+                                                  ? 'Connected to ${printer.name}!'
+                                                  : 'Failed to connect to ${printer.name}.'),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
                               },
                             ),
-                          );
-                        },
-                      ),
+                ),
               ),
               actions: [
                 TextButton(
@@ -6748,24 +6887,28 @@ class _DevicePlaceholderViewState extends State<DevicePlaceholderView> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0x0CFFFFFF)),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Icon(icon, color: const Color(0xFFFF6F24), size: 24),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: Icon(icon, color: const Color(0xFFFF6F24), size: 24),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+          ),
+          subtitle: subtitle != null
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.3),
+                  ),
+                )
+              : null,
+          trailing: trailing ?? (onTap != null ? const Icon(Icons.chevron_right, color: Colors.white30, size: 20) : null),
+          onTap: onTap,
         ),
-        subtitle: subtitle != null
-            ? Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.3),
-                ),
-              )
-            : null,
-        trailing: trailing ?? (onTap != null ? const Icon(Icons.chevron_right, color: Colors.white30, size: 20) : null),
-        onTap: onTap,
       ),
     );
   }
@@ -6976,64 +7119,66 @@ Future<bool> showOtpVerificationDialog(BuildContext context, String adminEmail) 
                 ),
               ],
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'A 6-digit verification code has been sent to the Admin email:',
-                  style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  adminEmail,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFFFF6F24)),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: otpController,
-                  keyboardType: TextInputType.number,
-                  obscureText: obscureOtp,
-                  maxLength: 6,
-                  decoration: InputDecoration(
-                    labelText: 'Enter 6-Digit OTP',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureOtp ? Icons.visibility : Icons.visibility_off,
-                        color: Colors.white60,
-                        size: 20,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'A 6-digit verification code has been sent to the Admin email:',
+                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    adminEmail,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFFFF6F24)),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: otpController,
+                    keyboardType: TextInputType.number,
+                    obscureText: obscureOtp,
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      labelText: 'Enter 6-Digit OTP',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureOtp ? Icons.visibility : Icons.visibility_off,
+                          color: Colors.white60,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            obscureOtp = !obscureOtp;
+                          });
+                        },
                       ),
-                      onPressed: () {
-                        setState(() {
-                          obscureOtp = !obscureOtp;
-                        });
-                      },
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF6F24).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFFF6F24).withOpacity(0.15)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline, size: 14, color: Color(0xFFFF6F24)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'For testing, use code: $otpCode',
-                          style: const TextStyle(fontSize: 11, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6F24).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFF6F24).withOpacity(0.15)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 14, color: Color(0xFFFF6F24)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'For testing, use code: $otpCode',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -7134,59 +7279,61 @@ class _AccountPlaceholderViewState extends State<AccountPlaceholderView> {
                   ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: editNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Full Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: editPinController,
-                    obscureText: obscurePin,
-                    maxLength: 4,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'PIN (4 digits)',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscurePin ? Icons.visibility : Icons.visibility_off,
-                          color: Colors.white60,
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            obscurePin = !obscurePin;
-                          });
-                        },
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: editNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: editRole,
-                    dropdownColor: const Color(0xFF12161B),
-                    decoration: InputDecoration(
-                      labelText: 'Role',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: editPinController,
+                      obscureText: obscurePin,
+                      maxLength: 4,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'PIN (4 digits)',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePin ? Icons.visibility : Icons.visibility_off,
+                            color: Colors.white60,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              obscurePin = !obscurePin;
+                            });
+                          },
+                        ),
+                      ),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'owner', child: Text('Owner')),
-                      DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() {
-                          editRole = val;
-                        });
-                      }
-                    },
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: editRole,
+                      dropdownColor: const Color(0xFF12161B),
+                      decoration: InputDecoration(
+                        labelText: 'Role',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'owner', child: Text('Owner')),
+                        DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() {
+                            editRole = val;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -7679,31 +7826,33 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                   Text('Developer Authorization', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Please enter the developer password to authorize this action.',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Developer Password',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.lock_outline),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Please enter the developer password to authorize this action.',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                     ),
-                  ),
-                  if (errorMsg.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      errorMsg,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'Developer Password',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                      ),
                     ),
-                  ]
-                ],
+                    if (errorMsg.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorMsg,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ]
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -8495,49 +8644,51 @@ class _FeedbackViewState extends State<FeedbackView> {
         title: const Text('Send Feedback', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
       ),
       body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
           child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Customer Experience Feedback', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                const Text(
-                  'We would love to hear your thoughts or bugs discovered in this premium POS software.',
-                  style: TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.4),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: subjectController,
-                  decoration: InputDecoration(labelText: 'Subject', hintText: 'e.g. Printer issue, Billing error', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: messageController,
-                  maxLines: 4,
-                  decoration: InputDecoration(labelText: 'Details', hintText: 'Explain the feedback details...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    final sub = subjectController.text.trim();
-                    final msg = messageController.text.trim();
-                    if (sub.isNotEmpty && msg.isNotEmpty) {
-                      subjectController.clear();
-                      messageController.clear();
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thank you! Your feedback has been logged.')));
-                    }
-                  },
-                  icon: const Icon(Icons.send),
-                  label: const Text('Submit Feedback', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6F24), minimumSize: const Size.fromHeight(48)),
-                ),
-              ],
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Customer Experience Feedback', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'We would love to hear your thoughts or bugs discovered in this premium POS software.',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.4),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: subjectController,
+                    decoration: InputDecoration(labelText: 'Subject', hintText: 'e.g. Printer issue, Billing error', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: messageController,
+                    maxLines: 4,
+                    decoration: InputDecoration(labelText: 'Details', hintText: 'Explain the feedback details...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      final sub = subjectController.text.trim();
+                      final msg = messageController.text.trim();
+                      if (sub.isNotEmpty && msg.isNotEmpty) {
+                        subjectController.clear();
+                        messageController.clear();
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thank you! Your feedback has been logged.')));
+                      }
+                    },
+                    icon: const Icon(Icons.send),
+                    label: const Text('Submit Feedback', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6F24), minimumSize: const Size.fromHeight(48)),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -10144,36 +10295,40 @@ class InvoiceFilterView extends StatelessWidget {
           width: isActive ? 1.5 : 1,
         ),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isActive ? const Color(0x1AFF6F24) : Colors.white10,
-            borderRadius: BorderRadius.circular(12),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isActive ? const Color(0x1AFF6F24) : Colors.white10,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: isActive ? const Color(0xFFFF6F24) : Colors.white70, size: 24),
           ),
-          child: Icon(icon, color: isActive ? const Color(0xFFFF6F24) : Colors.white70, size: 24),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: isActive ? const Color(0xFFFF6F24) : Colors.white,
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isActive ? const Color(0xFFFF6F24) : Colors.white,
+            ),
           ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            subtitle,
-            style: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.3),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              subtitle,
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.3),
+            ),
           ),
+          trailing: const Icon(Icons.chevron_right, color: Color(0xFFFF6F24)),
+          onTap: onTap ?? () {
+            state.setInvoiceFilter(filterKey);
+            state.navigateToView('invoices');
+          },
         ),
-        trailing: const Icon(Icons.chevron_right, color: Color(0xFFFF6F24)),
-        onTap: onTap ?? () {
-          state.setInvoiceFilter(filterKey);
-          state.navigateToView('invoices');
-        },
       ),
     );
   }

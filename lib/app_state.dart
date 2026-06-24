@@ -411,10 +411,12 @@ class AppState extends ChangeNotifier {
   Map<String, String> tableOccupiedTimes = {};
   List<InvoiceModel> invoices = [];
   List<MenuItem> menu = [];
+  List<CategoryModel> categories = [];
+  List<String> get categoriesList => categories.map((c) => c.name).toList();
 
   // Active UI Navigation state
   String? selectedTableId;
-  String currentCategory = 'Sandwich AC';
+  String currentCategory = 'PAPER DHOSA';
   String activeView = 'home'; // home, invoices, search, reports-revenue, reports-menu, reports-accounts, etc.
   List<String> viewHistory = [];
   bool searchBarVisible = false;
@@ -502,6 +504,118 @@ class AppState extends ChangeNotifier {
 
   // Defaults
   final List<MenuItem> defaultMenu = [
+    MenuItem(id: 1, name: "Sada Paper Dhosa", price: 60, category: "PAPER DHOSA", serialNumber: 1),
+    MenuItem(id: 2, name: "Baby Paper Dhosa", price: 50, category: "PAPER DHOSA", serialNumber: 2),
+    MenuItem(id: 3, name: "Butter Paper Dhosa", price: 70, category: "PAPER DHOSA", serialNumber: 3),
+    MenuItem(id: 4, name: "Nylon Paper Dhosa", price: 80, category: "PAPER DHOSA", serialNumber: 4),
+    MenuItem(id: 5, name: "Jira Paper Dhosa", price: 70, category: "PAPER DHOSA", serialNumber: 5),
+    MenuItem(id: 6, name: "Garlic Paper Dhosa", price: 80, category: "PAPER DHOSA", serialNumber: 6),
+    MenuItem(id: 7, name: "Cheese Paper Dhosa", price: 100, category: "PAPER DHOSA", serialNumber: 7),
+    MenuItem(id: 8, name: "Garlic Cheese Paper Dhosa", price: 130, category: "PAPER DHOSA", serialNumber: 8),
+    MenuItem(id: 9, name: "Chocolate Paper Dhosa", price: 100, category: "PAPER DHOSA", serialNumber: 9),
+    MenuItem(id: 10, name: "Cheese Periperi Paper Dhosa", price: 120, category: "PAPER DHOSA", serialNumber: 10),
+    MenuItem(id: 11, name: "Masala Dhosa (Oil)", price: 120, category: "MASALA DHOSA", serialNumber: 11),
+    MenuItem(id: 12, name: "Butter Masala Dhosa", price: 140, category: "MASALA DHOSA", serialNumber: 12),
+    MenuItem(id: 13, name: "Sezwan Masala Dhosa", price: 120, category: "MASALA DHOSA", serialNumber: 13),
+    MenuItem(id: 14, name: "Cheese Palak Masala Dhosa", price: 140, category: "MASALA DHOSA", serialNumber: 14),
+    MenuItem(id: 15, name: "Cheese Masala Dhosa", price: 140, category: "MASALA DHOSA", serialNumber: 15),
+    MenuItem(id: 16, name: "Paneer Masala Dhosa", price: 140, category: "MASALA DHOSA", serialNumber: 16),
+    MenuItem(id: 17, name: "Chese Allo Palak Masala Dhosa", price: 150, category: "MASALA DHOSA", serialNumber: 17),
+    MenuItem(id: 18, name: "Sp. 99 Masala Dhosa", price: 200, category: "MASALA DHOSA", serialNumber: 18),
+    MenuItem(id: 19, name: "Mysore Masala (Oil)", price: 140, category: "MYSORE DHOSA", serialNumber: 19),
+    MenuItem(id: 20, name: "Butter Mysore Masala", price: 160, category: "MYSORE DHOSA", serialNumber: 20),
+    MenuItem(id: 21, name: "Cheese Mysore Masala", price: 180, category: "MYSORE DHOSA", serialNumber: 21),
+    MenuItem(id: 22, name: "Paneer Mysore Masala", price: 190, category: "MYSORE DHOSA", serialNumber: 22),
+    MenuItem(id: 23, name: "Cheese Paneer Mysore Masala", price: 200, category: "MYSORE DHOSA", serialNumber: 23),
+    MenuItem(id: 24, name: "Paneer Tukda Mysore Masala", price: 160, category: "MYSORE DHOSA", serialNumber: 24),
+    MenuItem(id: 25, name: "Cheese Paneer Tukda Mysore", price: 180, category: "MYSORE DHOSA", serialNumber: 25),
+    MenuItem(id: 26, name: "Gotala Mysore", price: 170, category: "MYSORE DHOSA", serialNumber: 26),
+    MenuItem(id: 27, name: "Green Gotala", price: 190, category: "MYSORE DHOSA", serialNumber: 27),
+    MenuItem(id: 28, name: "Sp. 99 Mysore Masala", price: 220, category: "MYSORE DHOSA", serialNumber: 28),
+    MenuItem(id: 29, name: "Jini Roll", price: 170, category: "FANCY DHOSA", serialNumber: 29),
+    MenuItem(id: 30, name: "Dilkhush", price: 170, category: "FANCY DHOSA", serialNumber: 30),
+    MenuItem(id: 31, name: "Palak Paneer", price: 150, category: "FANCY DHOSA", serialNumber: 31),
+    MenuItem(id: 32, name: "Cheese Palak Paneer", price: 170, category: "FANCY DHOSA", serialNumber: 32),
+    MenuItem(id: 33, name: "Paneer Chilli Dhosa", price: 150, category: "FANCY DHOSA", serialNumber: 33),
+    MenuItem(id: 34, name: "Raja-Rani Dhosa", price: 160, category: "FANCY DHOSA", serialNumber: 34),
+    MenuItem(id: 35, name: "Pizza Dhosa", price: 180, category: "FANCY DHOSA", serialNumber: 35),
+    MenuItem(id: 36, name: "Spring Roll Dhosa", price: 180, category: "FANCY DHOSA", serialNumber: 36),
+    MenuItem(id: 37, name: "Sweet Corn Dhosa", price: 150, category: "FANCY DHOSA", serialNumber: 37),
+    MenuItem(id: 38, name: "Chinese Dhosa", price: 160, category: "FANCY DHOSA", serialNumber: 38),
+    MenuItem(id: 39, name: "Veg. Tufani Dhosa", price: 180, category: "FANCY DHOSA", serialNumber: 39),
+    MenuItem(id: 40, name: "Sp. 99 Matka Dhosa", price: 220, category: "FANCY DHOSA", serialNumber: 40),
+    MenuItem(id: 41, name: "FRENCH FRIES", price: 80, category: "KIDS SPECIAL", serialNumber: 41),
+    MenuItem(id: 42, name: "CHEESE FRENCH FRIES", price: 100, category: "KIDS SPECIAL", serialNumber: 42),
+    MenuItem(id: 43, name: "PERI PERI FRENCH FRIES", price: 90, category: "KIDS SPECIAL", serialNumber: 43),
+    MenuItem(id: 44, name: "ONION RING", price: 90, category: "KIDS SPECIAL", serialNumber: 44),
+    MenuItem(id: 45, name: "SMILLEY", price: 90, category: "KIDS SPECIAL", serialNumber: 45),
+    MenuItem(id: 46, name: "POTETO WHEELS", price: 90, category: "KIDS SPECIAL", serialNumber: 46),
+    MenuItem(id: 47, name: "CHEESE BALL", price: 100, category: "KIDS SPECIAL", serialNumber: 47),
+    MenuItem(id: 48, name: "PLAIN MAGGI", price: 60, category: "MAGGI SPECIAL", serialNumber: 48),
+    MenuItem(id: 49, name: "MASALA MAGGI", price: 70, category: "MAGGI SPECIAL", serialNumber: 49),
+    MenuItem(id: 50, name: "VEG. MAGGI", price: 80, category: "MAGGI SPECIAL", serialNumber: 50),
+    MenuItem(id: 51, name: "BUTTER MAGGI", price: 90, category: "MAGGI SPECIAL", serialNumber: 51),
+    MenuItem(id: 52, name: "CHEESE MAGGI", price: 100, category: "MAGGI SPECIAL", serialNumber: 52),
+    MenuItem(id: 53, name: "WHITE SAUCES PASTA", price: 120, category: "PASTA", serialNumber: 53),
+    MenuItem(id: 54, name: "RED SAUCES PASTA", price: 120, category: "PASTA", serialNumber: 54),
+    MenuItem(id: 55, name: "PINK SAUCES PASTA", price: 130, category: "PASTA", serialNumber: 55),
+    MenuItem(id: 56, name: "CHEESE CORN PASTA", price: 150, category: "PASTA", serialNumber: 56),
+    MenuItem(id: 57, name: "VEG. STEAM MOMOS", price: 80, category: "MOMOS", serialNumber: 57),
+    MenuItem(id: 58, name: "VEG. FRIED MOMOS", price: 90, category: "MOMOS", serialNumber: 58),
+    MenuItem(id: 59, name: "VEG. TANDOORI MOMOS", price: 110, category: "MOMOS", serialNumber: 59),
+    MenuItem(id: 60, name: "VEG. CHEESE MOMOS", price: 100, category: "MOMOS", serialNumber: 60),
+    MenuItem(id: 61, name: "VEG. PERI PERI MOMOS", price: 100, category: "MOMOS", serialNumber: 61),
+    MenuItem(id: 62, name: "VEG. CHEESE CORN MOMOS", price: 110, category: "MOMOS", serialNumber: 62),
+    MenuItem(id: 63, name: "CHEESE GARLIC BREAD", price: 80, category: "GARLIC BREAD", serialNumber: 63),
+    MenuItem(id: 64, name: "CHEESE GARLIC BREAD (PEPRICA, OLIVE JALAPENOS)", price: 100, category: "GARLIC BREAD", serialNumber: 64),
+    MenuItem(id: 65, name: "CHEESE CHILLI GARLIC BREAD", price: 90, category: "GARLIC BREAD", serialNumber: 65),
+    MenuItem(id: 66, name: "PANEER TIKKA BREAD", price: 120, category: "GARLIC BREAD", serialNumber: 66),
+    MenuItem(id: 67, name: "ALOO TIKKI BURGER", price: 60, category: "BURGER", serialNumber: 67),
+    MenuItem(id: 68, name: "VEG. BURGER", price: 70, category: "BURGER", serialNumber: 68),
+    MenuItem(id: 69, name: "VEG. CHEESE BURGER", price: 80, category: "BURGER", serialNumber: 69),
+    MenuItem(id: 70, name: "VEG. PERI PERI BURGER", price: 80, category: "BURGER", serialNumber: 70),
+    MenuItem(id: 71, name: "SEZWAN CHEESE BURGER", price: 80, category: "BURGER", serialNumber: 71),
+    MenuItem(id: 72, name: "VEG. PANEER BURGER", price: 110, category: "BURGER", serialNumber: 72),
+    MenuItem(id: 73, name: "BREAD BUTTER", price: 40, category: "SANDWICH", serialNumber: 73),
+    MenuItem(id: 74, name: "GRILL GREEN CHUTNEY SANDWICH", price: 50, category: "SANDWICH", serialNumber: 74),
+    MenuItem(id: 75, name: "VEG. SANDWICH", price: 60, category: "SANDWICH", serialNumber: 75),
+    MenuItem(id: 76, name: "VEG. CHEESE SANDWICH", price: 80, category: "SANDWICH", serialNumber: 76),
+    MenuItem(id: 77, name: "GARDEN GRILL SANDWICH", price: 80, category: "SANDWICH", serialNumber: 77),
+    MenuItem(id: 78, name: "VEG. CHEESE GRILL 2 Layer", price: 100, category: "SANDWICH", serialNumber: 78),
+    MenuItem(id: 79, name: "VEG. CHEESE CLUB 3 Layer", price: 140, category: "SANDWICH", serialNumber: 79),
+    MenuItem(id: 80, name: "VEG. CORN PANEER SANDWICH", price: 150, category: "SANDWICH", serialNumber: 80),
+    MenuItem(id: 81, name: "99 SPECIAL SANDWICH", price: 160, category: "SANDWICH", serialNumber: 81),
+    MenuItem(id: 82, name: "MARGHERITA PIZZA", price: 110, category: "PIZZA", serialNumber: 82),
+    MenuItem(id: 83, name: "GOLDEN DELIGHT PIZZA", price: 140, category: "PIZZA", serialNumber: 83),
+    MenuItem(id: 84, name: "JALAPENO SPECIAL PIZZA", price: 160, category: "PIZZA", serialNumber: 84),
+    MenuItem(id: 85, name: "EXTRAVAGANZA PIZZA", price: 160, category: "PIZZA", serialNumber: 85),
+    MenuItem(id: 86, name: "PANEER TIKA PIZZA", price: 170, category: "PIZZA", serialNumber: 86),
+    MenuItem(id: 87, name: "PAPPY PANEER PIZZA", price: 180, category: "PIZZA", serialNumber: 87),
+    MenuItem(id: 88, name: "99 SPECIAL PIZZA", price: 200, category: "PIZZA", serialNumber: 88),
+    MenuItem(id: 89, name: "FARM HOUSE PIZZA", price: 220, category: "PIZZA", serialNumber: 89),
+    MenuItem(id: 90, name: "STRAWBERRY SHAKE", price: 110, category: "SHAKES", serialNumber: 90),
+    MenuItem(id: 91, name: "MANGO SHAKE", price: 110, category: "SHAKES", serialNumber: 91),
+    MenuItem(id: 92, name: "VENILA SHAKE", price: 110, category: "SHAKES", serialNumber: 92),
+    MenuItem(id: 93, name: "CHOCOLATE SHAKE", price: 110, category: "SHAKES", serialNumber: 93),
+    MenuItem(id: 94, name: "BUTTER SCOTCH SHAKE", price: 110, category: "SHAKES", serialNumber: 94),
+    MenuItem(id: 95, name: "BLACK CURRENT SHAKE", price: 110, category: "SHAKES", serialNumber: 95),
+    MenuItem(id: 96, name: "OREO SHAKE", price: 120, category: "SHAKES", serialNumber: 96),
+    MenuItem(id: 97, name: "KIT KAT SHAKE", price: 120, category: "SHAKES", serialNumber: 97),
+    MenuItem(id: 98, name: "MAGIC MINT MOJITO", price: 80, category: "MOCKTAILS", serialNumber: 98),
+    MenuItem(id: 99, name: "ORANGE MOJITO", price: 80, category: "MOCKTAILS", serialNumber: 99),
+    MenuItem(id: 100, name: "GREEN APPLE MOJITO", price: 80, category: "MOCKTAILS", serialNumber: 100),
+    MenuItem(id: 101, name: "BLUE LAGOON MOJITO", price: 90, category: "MOCKTAILS", serialNumber: 101),
+    MenuItem(id: 102, name: "TEA", price: 25, category: "TEA AND COFFEE", serialNumber: 102),
+    MenuItem(id: 103, name: "MASALA TEA", price: 30, category: "TEA AND COFFEE", serialNumber: 103),
+    MenuItem(id: 104, name: "ELICHI TEA", price: 30, category: "TEA AND COFFEE", serialNumber: 104),
+    MenuItem(id: 105, name: "HOT COFFEE", price: 30, category: "TEA AND COFFEE", serialNumber: 105),
+    MenuItem(id: 106, name: "COLD COFFEE", price: 80, category: "TEA AND COFFEE", serialNumber: 106),
+    MenuItem(id: 107, name: "MINERAL WATER BOTTLE", price: 20, category: "OTHER", serialNumber: 107),
+    MenuItem(id: 108, name: "COLD DRINKS", price: 20, category: "OTHER", serialNumber: 108),
+  ];
+
+  final List<MenuItem> oldDefaultMenu = [];
+  final List<MenuItem> ignoredOldMenu = [
     MenuItem(id: 1, name: "Toast Sandwich", price: 60, category: "Sandwich AC", serialNumber: 1, desc: "Crispy toasted sandwich with potato and spice filling."),
     MenuItem(id: 2, name: "Veg.Sandwich", price: 60, category: "Sandwich AC", serialNumber: 2, desc: "Fresh raw vegetable sandwich with mint chutney."),
     MenuItem(id: 3, name: "Jain Veg. Sandwich", price: 60, category: "Sandwich AC", serialNumber: 3, desc: "Vegetable sandwich prepared without onion"),
@@ -843,26 +957,6 @@ class AppState extends ChangeNotifier {
     MenuItem(id: 314, name: "Min. Water", price: 20, category: "Cold Drinks AC", serialNumber: 314, desc: "Chilled mineral drinking water."),
   ];
 
-  List<CategoryModel> categories = [];
-  List<String> get categoriesList => categories.map((c) => c.name).toList();
-
-  final List<CategoryModel> defaultCategories = [
-    CategoryModel(name: "Sandwich AC", serialNumber: 1),
-    CategoryModel(name: "Grilled AC", serialNumber: 2),
-    CategoryModel(name: "Pizza AC", serialNumber: 3),
-    CategoryModel(name: "Paneer Sp AC", serialNumber: 4),
-    CategoryModel(name: "Kaju Sp AC", serialNumber: 5),
-    CategoryModel(name: "Punjabi AC", serialNumber: 6),
-    CategoryModel(name: "Tandoori AC", serialNumber: 7),
-    CategoryModel(name: "Papad AC", serialNumber: 8),
-    CategoryModel(name: "Soup AC", serialNumber: 9),
-    CategoryModel(name: "Noodles AC", serialNumber: 10),
-    CategoryModel(name: "Veg Food Gravy AC", serialNumber: 11),
-    CategoryModel(name: "Rice Dish AC", serialNumber: 12),
-    CategoryModel(name: "Sizzlers AC", serialNumber: 13),
-    CategoryModel(name: "Cold Drinks AC", serialNumber: 14),
-  ];
-
   final List<TableModel> defaultTablesList = [
     TableModel(id: "A1", type: "table"),
     TableModel(id: "A2", type: "table"),
@@ -891,6 +985,25 @@ class AppState extends ChangeNotifier {
     TableModel(id: "PARCEL 3", type: "parcel"),
     TableModel(id: "PARCEL 4", type: "parcel"),
     TableModel(id: "PARCEL 5", type: "parcel")
+  ];
+
+  final List<CategoryModel> defaultCategories = [
+    CategoryModel(name: "PAPER DHOSA", serialNumber: 1),
+    CategoryModel(name: "MASALA DHOSA", serialNumber: 2),
+    CategoryModel(name: "MYSORE DHOSA", serialNumber: 3),
+    CategoryModel(name: "FANCY DHOSA", serialNumber: 4),
+    CategoryModel(name: "KIDS SPECIAL", serialNumber: 5),
+    CategoryModel(name: "MAGGI SPECIAL", serialNumber: 6),
+    CategoryModel(name: "PASTA", serialNumber: 7),
+    CategoryModel(name: "MOMOS", serialNumber: 8),
+    CategoryModel(name: "GARLIC BREAD", serialNumber: 9),
+    CategoryModel(name: "BURGER", serialNumber: 10),
+    CategoryModel(name: "SANDWICH", serialNumber: 11),
+    CategoryModel(name: "PIZZA", serialNumber: 12),
+    CategoryModel(name: "SHAKES", serialNumber: 13),
+    CategoryModel(name: "MOCKTAILS", serialNumber: 14),
+    CategoryModel(name: "TEA AND COFFEE", serialNumber: 15),
+    CategoryModel(name: "OTHER", serialNumber: 16),
   ];
 
   Timer? _licensePoller;
@@ -999,28 +1112,11 @@ class AppState extends ChangeNotifier {
       saveTables();
     }
 
-    final currentMenuVersion = 'v7';
+    final currentMenuVersion = 'v9';
     final savedMenuVersion = LocalStorageHelper.getString('ahar_menu_version');
     if (savedMenuVersion != currentMenuVersion) {
-          // Load categories list
-          final categoriesJson = LocalStorageHelper.getString('ahar_categories');
-          if (categoriesJson != null) {
-            try {
-              final List list = jsonDecode(categoriesJson);
-              categories = list.map((item) => CategoryModel.fromJson(item)).toList();
-            } catch (e) {
-              categories = List.from(defaultCategories);
-            }
-          } else {
-            categories = List.from(defaultCategories);
-            saveCategories();
-          }
-          // Ensure all defaultCategories exist in loaded categories
-          for (final defCat in defaultCategories) {
-            if (!categories.any((c) => c.name == defCat.name)) {
-              categories.add(defCat);
-            }
-          }
+          // Reset categories to defaultCategories on menu version bump
+          categories = List.from(defaultCategories);
           categories.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
           saveCategories();
       
@@ -1037,35 +1133,13 @@ class AppState extends ChangeNotifier {
             menu = List.from(defaultMenu);
             saveMenu();
           }
-          // Automatically migrate Sandwich AC, Grilled AC, Pizza AC, Paneer Sp AC, Kaju Sp AC, Punjabi AC, Tandoori AC, Papad AC, Soup AC, Noodles AC, Veg Food Gravy AC, Rice Dish AC, Sizzlers AC, and Cold Drinks AC category items to match updated defaults
-          menu.removeWhere((item) => item.category == 'Sandwich AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Sandwich AC'));
-          menu.removeWhere((item) => item.category == 'Grilled AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Grilled AC'));
-          menu.removeWhere((item) => item.category == 'Pizza AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Pizza AC'));
-          menu.removeWhere((item) => item.category == 'Paneer Sp AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Paneer Sp AC'));
-          menu.removeWhere((item) => item.category == 'Kaju Sp AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Kaju Sp AC'));
-          menu.removeWhere((item) => item.category == 'Punjabi AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Punjabi AC'));
-          menu.removeWhere((item) => item.category == 'Tandoori AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Tandoori AC'));
-          menu.removeWhere((item) => item.category == 'Papad AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Papad AC'));
-          menu.removeWhere((item) => item.category == 'Soup AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Soup AC'));
-          menu.removeWhere((item) => item.category == 'Noodles AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Noodles AC'));
-          menu.removeWhere((item) => item.category == 'Veg Food Gravy AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Veg Food Gravy AC'));
-          menu.removeWhere((item) => item.category == 'Rice Dish AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Rice Dish AC'));
-          menu.removeWhere((item) => item.category == 'Sizzlers AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Sizzlers AC'));
-          menu.removeWhere((item) => item.category == 'Cold Drinks AC');
-          menu.addAll(defaultMenu.where((item) => item.category == 'Cold Drinks AC'));
+          // Automatically migrate categories to match updated defaults, removing old categories
+          final newCategoryNames = defaultCategories.map((c) => c.name).toSet();
+          menu.removeWhere((item) => !newCategoryNames.contains(item.category));
+          for (final defCat in defaultCategories) {
+            menu.removeWhere((item) => item.category == defCat.name);
+            menu.addAll(defaultMenu.where((item) => item.category == defCat.name));
+          }
           menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
           cleanDuplicateMenuItems();
           saveMenu();
@@ -1140,7 +1214,7 @@ class AppState extends ChangeNotifier {
 
     // Load navigation state
     activeView = LocalStorageHelper.getString('ahar_active_view') ?? 'home';
-    currentCategory = LocalStorageHelper.getString('ahar_current_category') ?? 'Sandwich AC';
+    currentCategory = LocalStorageHelper.getString('ahar_current_category') ?? 'PAPER DHOSA';
     final savedTableId = LocalStorageHelper.getString('ahar_selected_table_id');
     selectedTableId = (savedTableId != null && savedTableId.isNotEmpty) ? savedTableId : null;
 
@@ -2126,7 +2200,7 @@ class AppState extends ChangeNotifier {
 
   void selectTable(String tableId) {
     selectedTableId = tableId;
-    currentCategory = 'Sandwich AC';
+    currentCategory = 'PAPER DHOSA';
     searchBarVisible = false;
     menuSearchQuery = '';
     saveNavigationState();
@@ -3662,7 +3736,7 @@ class AppState extends ChangeNotifier {
 
         if (firstIndex != -1) {
           final inv = invoices[firstIndex];
-          final menuItem = menu.isNotEmpty ? menu.first : MenuItem(id: 1, name: "Toast Sandwich", price: 90, category: "Sandwich AC");
+          final menuItem = menu.isNotEmpty ? menu.first : MenuItem(id: 1, name: "Toast Sandwich", price: 90, category: "PAPER DHOSA");
           
           int bestPrice = 0;
           for (int p = 0; p <= targetTotal; p++) {

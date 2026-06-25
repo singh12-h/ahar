@@ -6,10 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'storage_helper.dart';
-import 'firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firestore_service.dart';
 import 'js_interface.dart' as js;
-
+import 'tenant_db_manager.dart';
+import 'default_menu_data.dart';
 
 // --- DATA MODELS ---
 
@@ -316,6 +317,8 @@ class AppState extends ChangeNotifier {
   List<BluetoothLogEntry> btLogs = [];
   static const int _maxBtLogs = 200;
 
+  DateTime? _lastDiagnosticsSync;
+
   void addBtLog(String event, String message, String diagnosis, {String? mac, String? error}) {
     btLogs.insert(0, BluetoothLogEntry(
       event: event,
@@ -330,11 +333,15 @@ class AppState extends ChangeNotifier {
     debugPrint('[BT-LOG] [$event] $message | Diagnosis: $diagnosis${error != null ? ' | Error: $error' : ''}');
     notifyListeners();
 
-    // Async push diagnostics logs to Firestore under the license key on important status and error events
+    // Throttled: sync diagnostics at most once every 5 minutes to save Firestore writes
     if (saasLicenseKey.isNotEmpty && (event == 'ERROR' || event == 'CONNECT' || event == 'DISCONNECT' || event == 'SYNC')) {
-      FirestoreService.syncDiagnostics(btLogs, saasLicenseKey).catchError((e) {
-        debugPrint('[Firestore] Error backing up diagnostics log: $e');
-      });
+      final now = DateTime.now();
+      if (_lastDiagnosticsSync == null || now.difference(_lastDiagnosticsSync!).inMinutes >= 5) {
+        _lastDiagnosticsSync = now;
+        FirestoreService.syncDiagnostics(btLogs, saasLicenseKey).catchError((e) {
+          debugPrint('[Firestore] Error backing up diagnostics log: $e');
+        });
+      }
     }
   }
 
@@ -416,7 +423,7 @@ class AppState extends ChangeNotifier {
 
   // Active UI Navigation state
   String? selectedTableId;
-  String currentCategory = 'PAPER DHOSA';
+  String currentCategory = 'SANDWICH';
   String activeView = 'home'; // home, invoices, search, reports-revenue, reports-menu, reports-accounts, etc.
   List<String> viewHistory = [];
   bool searchBarVisible = false;
@@ -474,13 +481,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Cloud storage capacity limits
   int cloudInvoicesLimit = 100;
   bool shownCloudFullAlert = false;
 
   double get cloudUsagePercentage => (invoices.length / cloudInvoicesLimit) * 100.0;
-  bool get isCloudAlmostFull => cloudUsagePercentage >= 80.0;
+  
+  bool get isCloudAlmostFull {
+    final almostFull = cloudUsagePercentage >= 80.0;
+    if (!almostFull) {
+      shownCloudFullAlert = false;
+    }
+    return almostFull;
+  }
+  
   bool get isCloudFull => cloudUsagePercentage >= 100.0;
+
+  void setShownCloudFullAlert(bool value) {
+    shownCloudFullAlert = value;
+    notifyListeners();
+  }
 
   String get saasMessage {
     if (saasTitle == "Subscription Expired") {
@@ -503,7 +522,7 @@ class AppState extends ChangeNotifier {
   }
 
   // Defaults
-  final List<MenuItem> defaultMenu = [
+  final List<MenuItem> _oldDefaultMenu = [
     MenuItem(id: 1, name: "Sada Paper Dhosa", price: 60, category: "PAPER DHOSA", serialNumber: 1),
     MenuItem(id: 2, name: "Baby Paper Dhosa", price: 50, category: "PAPER DHOSA", serialNumber: 2),
     MenuItem(id: 3, name: "Butter Paper Dhosa", price: 70, category: "PAPER DHOSA", serialNumber: 3),
@@ -957,6 +976,8 @@ class AppState extends ChangeNotifier {
     MenuItem(id: 314, name: "Min. Water", price: 20, category: "Cold Drinks AC", serialNumber: 314, desc: "Chilled mineral drinking water."),
   ];
 
+  final List<MenuItem> defaultMenu = newDefaultMenu;
+
   final List<TableModel> defaultTablesList = [
     TableModel(id: "A1", type: "table"),
     TableModel(id: "A2", type: "table"),
@@ -987,27 +1008,12 @@ class AppState extends ChangeNotifier {
     TableModel(id: "PARCEL 5", type: "parcel")
   ];
 
-  final List<CategoryModel> defaultCategories = [
-    CategoryModel(name: "PAPER DHOSA", serialNumber: 1),
-    CategoryModel(name: "MASALA DHOSA", serialNumber: 2),
-    CategoryModel(name: "MYSORE DHOSA", serialNumber: 3),
-    CategoryModel(name: "FANCY DHOSA", serialNumber: 4),
-    CategoryModel(name: "KIDS SPECIAL", serialNumber: 5),
-    CategoryModel(name: "MAGGI SPECIAL", serialNumber: 6),
-    CategoryModel(name: "PASTA", serialNumber: 7),
-    CategoryModel(name: "MOMOS", serialNumber: 8),
-    CategoryModel(name: "GARLIC BREAD", serialNumber: 9),
-    CategoryModel(name: "BURGER", serialNumber: 10),
-    CategoryModel(name: "SANDWICH", serialNumber: 11),
-    CategoryModel(name: "PIZZA", serialNumber: 12),
-    CategoryModel(name: "SHAKES", serialNumber: 13),
-    CategoryModel(name: "MOCKTAILS", serialNumber: 14),
-    CategoryModel(name: "TEA AND COFFEE", serialNumber: 15),
-    CategoryModel(name: "OTHER", serialNumber: 16),
-  ];
+  final List<CategoryModel> defaultCategories = newDefaultCategories;
 
   Timer? _licensePoller;
   Timer? _cloudSyncTimer;
+  Timer? _cartSyncDebounce;
+  bool _hasTenantDb = false;
 
 
   AppState() {
@@ -1021,6 +1027,7 @@ class AppState extends ChangeNotifier {
     
     // Check SaaS License Activation
     final savedKey = LocalStorageHelper.getString('ahar_license_key');
+
     if (savedKey == null || savedKey.isEmpty) {
       saasActivationRequired = true;
       saasLocked = false;
@@ -1030,6 +1037,23 @@ class AppState extends ChangeNotifier {
       saasLocked = false;
       saasLicenseKey = savedKey;
       appId = int.tryParse(LocalStorageHelper.getString('ahar_app_id') ?? '104') ?? 104;
+
+      // --- DYNAMIC DATABASE RE-INITIALIZATION ON STARTUP ---
+      final dbConfigStr = LocalStorageHelper.getString('saas_tenant_db_config_$appId');
+      if (dbConfigStr != null && dbConfigStr.isNotEmpty) {
+        _hasTenantDb = true;
+        try {
+          final dbConfig = jsonDecode(dbConfigStr);
+          TenantDbManager.initialize(Map<String, dynamic>.from(dbConfig)).then((_) {
+            debugPrint('[DEBUG] Tenant database re-initialized on startup.');
+          });
+        } catch (e) {
+          debugPrint('[DEBUG] Failed to parse or init tenant DB config on startup: $e');
+        }
+      } else {
+        _hasTenantDb = false;
+        debugPrint('[DEBUG] No tenant DB config found. Running in LOCAL-ONLY mode.');
+      }
     }
 
 
@@ -1112,11 +1136,11 @@ class AppState extends ChangeNotifier {
       saveTables();
     }
 
-    final currentMenuVersion = 'v9';
+    final currentMenuVersion = 'v12';
     final savedMenuVersion = LocalStorageHelper.getString('ahar_menu_version');
     if (savedMenuVersion != currentMenuVersion) {
           // Reset categories to defaultCategories on menu version bump
-          categories = List.from(defaultCategories);
+          categories = List.from(newDefaultCategories);
           categories.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
           saveCategories();
       
@@ -1127,18 +1151,18 @@ class AppState extends ChangeNotifier {
               final List list = jsonDecode(menuJson);
               menu = list.map((item) => MenuItem.fromJson(item)).toList();
             } catch (e) {
-              menu = List.from(defaultMenu);
+              menu = List.from(newDefaultMenu);
             }
           } else {
-            menu = List.from(defaultMenu);
+            menu = List.from(newDefaultMenu);
             saveMenu();
           }
           // Automatically migrate categories to match updated defaults, removing old categories
-          final newCategoryNames = defaultCategories.map((c) => c.name).toSet();
+          final newCategoryNames = newDefaultCategories.map((c) => c.name).toSet();
           menu.removeWhere((item) => !newCategoryNames.contains(item.category));
-          for (final defCat in defaultCategories) {
+          for (final defCat in newDefaultCategories) {
             menu.removeWhere((item) => item.category == defCat.name);
-            menu.addAll(defaultMenu.where((item) => item.category == defCat.name));
+            menu.addAll(newDefaultMenu.where((item) => item.category == defCat.name));
           }
           menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
           cleanDuplicateMenuItems();
@@ -1152,11 +1176,12 @@ class AppState extends ChangeNotifier {
         try {
           final List list = jsonDecode(categoriesJson);
           categories = list.map((item) => CategoryModel.fromJson(item)).toList();
+          if (categories.isEmpty) categories = List.from(newDefaultCategories);
         } catch (e) {
-          categories = List.from(defaultCategories);
+          categories = List.from(newDefaultCategories);
         }
       } else {
-        categories = List.from(defaultCategories);
+        categories = List.from(newDefaultCategories);
       }
       categories.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
 
@@ -1165,11 +1190,12 @@ class AppState extends ChangeNotifier {
         try {
           final List list = jsonDecode(menuJson);
           menu = list.map((item) => MenuItem.fromJson(item)).toList();
+          if (menu.isEmpty) menu = List.from(newDefaultMenu);
         } catch (e) {
-          menu = List.from(defaultMenu);
+          menu = List.from(newDefaultMenu);
         }
       } else {
-        menu = List.from(defaultMenu);
+        menu = List.from(newDefaultMenu);
       }
       menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
       cleanDuplicateMenuItems();
@@ -1214,15 +1240,15 @@ class AppState extends ChangeNotifier {
 
     // Load navigation state
     activeView = LocalStorageHelper.getString('ahar_active_view') ?? 'home';
-    currentCategory = LocalStorageHelper.getString('ahar_current_category') ?? 'PAPER DHOSA';
+    currentCategory = LocalStorageHelper.getString('ahar_current_category') ?? 'SANDWICH';
     final savedTableId = LocalStorageHelper.getString('ahar_selected_table_id');
     selectedTableId = (savedTableId != null && savedTableId.isNotEmpty) ? savedTableId : null;
 
     // Pre-population of busy tables and sample invoices has been removed to start with a clean state.
 
-    // Initialize SaaS checking and setup poller to catch command center changes in browser window (every 15 seconds to avoid UI thread lag)
+    // Initialize SaaS checking and setup poller (every 60 seconds to save Firestore quota)
     checkSaaSStatus();
-    _licensePoller = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _licensePoller = Timer.periodic(const Duration(seconds: 60), (timer) {
       checkSaaSStatus();
     });
 
@@ -1231,22 +1257,35 @@ class AppState extends ChangeNotifier {
       fetchSaaSGlobalSettingsFromCloud().then((_) {
         checkSaaSStatus();
         updateHeartbeatOnCloud();
+        // After fetching cloud DB, check if a dbConfig was added for this key
+        if (!_hasTenantDb && saasLicenseKey.isNotEmpty) {
+          _checkAndUpgradeToCloudMode();
+        }
       });
     });
 
-    // Setup cloud sync timer (every 3 minutes to optimize network requests and database read/write limits)
-    _cloudSyncTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
+    // Setup cloud sync timer (every 10 minutes to optimize Firestore daily read/write quota)
+    _cloudSyncTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
       fetchSaaSGlobalSettingsFromCloud();
+      fetchSaaSDatabaseFromCloud(); // Keep local cache fresh for heartbeat
       updateHeartbeatOnCloud();
+      // Periodically check if admin assigned a dbConfig to this license
+      if (!_hasTenantDb && saasLicenseKey.isNotEmpty) {
+        _checkAndUpgradeToCloudMode();
+      }
     });
 
-    // Try to sync with Firestore initial data on startup if license is active
-    if (saasLicenseKey.isNotEmpty) {
+    // Try to sync with Firestore initial data on startup if license is active AND has a tenant DB
+    if (saasLicenseKey.isNotEmpty && _hasTenantDb) {
       syncDataFromCloud().catchError((e) {
         debugPrint('[Firestore] Startup pull failed: $e');
         cloudStatus = 'offline';
         notifyListeners();
       });
+    } else if (saasLicenseKey.isNotEmpty && !_hasTenantDb) {
+      debugPrint('[LOCAL MODE] No tenant DB. App running fully offline with local data.');
+      cloudStatus = 'local';
+      notifyListeners();
     } else {
       cloudStatus = 'connected';
       notifyListeners();
@@ -1259,15 +1298,76 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _licensePoller?.cancel();
     _cloudSyncTimer?.cancel();
+    _cartSyncDebounce?.cancel();
     _internetCheckTimer?.cancel();
     super.dispose();
   }
 
+  Future<void> wipeTenantFirebaseData() async {
+    try {
+      debugPrint('[Firestore] Wiping old data from tenant Firebase...');
+      final db = TenantDbManager.instance;
+      final collections = ['menu_items', 'categories', 'invoices', 'tables'];
+      for (var col in collections) {
+        final snap = await db.collection(col).get();
+        if (snap.docs.isNotEmpty) {
+          final batch = db.batch();
+          for (var doc in snap.docs) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
+        }
+      }
+      debugPrint('[Firestore] Old data wiped successfully!');
+    } catch (e) {
+      debugPrint('[Firestore] Error wiping data: $e');
+    }
+  }
+
+  /// Checks if the admin (Himanshu) has assigned a dbConfig to this license key.
+  /// If yes, upgrades from local-only mode to cloud mode.
+  Future<void> _checkAndUpgradeToCloudMode() async {
+    try {
+      final rawDb = LocalStorageHelper.getString('saas_central_db');
+      if (rawDb == null) return;
+      final dbObj = jsonDecode(rawDb);
+      final List licensesList = dbObj['licenses'] ?? [];
+      for (var l in licensesList) {
+        if (l['key'].toString().trim().toUpperCase() == saasLicenseKey.trim().toUpperCase()) {
+          if (l['dbConfig'] != null) {
+            debugPrint('[UPGRADE] dbConfig found for this license! Upgrading to CLOUD mode...');
+            final dbConfigStr = jsonEncode(l['dbConfig']);
+            await LocalStorageHelper.setString('saas_tenant_db_config_$appId', dbConfigStr);
+            await TenantDbManager.initialize(Map<String, dynamic>.from(l['dbConfig']));
+            _hasTenantDb = true;
+            await syncDataFromCloud();
+            debugPrint('[UPGRADE] Successfully upgraded to cloud mode!');
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('[UPGRADE] Error checking for cloud upgrade: $e');
+    }
+  }
+
   Future<void> syncDataFromCloud() async {
     if (saasLicenseKey.isEmpty) return;
+    if (!_hasTenantDb) {
+      debugPrint('[LOCAL MODE] Skipping cloud sync — no tenant DB configured.');
+      return;
+    }
     cloudStatus = 'syncing';
     notifyListeners();
     try {
+      if (LocalStorageHelper.getString('has_wiped_firebase_v4') != 'true') {
+         await wipeTenantFirebaseData();
+         LocalStorageHelper.setString('has_wiped_firebase_v4', 'true');
+         // Force push the new local menu and categories to the clean firebase
+         await FirestoreService.syncCategories(categories, saasLicenseKey);
+         await FirestoreService.syncMenu(menu, saasLicenseKey);
+      }
+
       final cloudData = await FirestoreService.pullInitialData(saasLicenseKey);
       if (cloudData.isNotEmpty) {
         if (cloudData.containsKey('tables')) {
@@ -1311,7 +1411,13 @@ class AppState extends ChangeNotifier {
       } else {
         cloudStatus = 'connected';
         notifyListeners();
-        debugPrint('[Firestore] Cloud pull returned empty data (data is 0 or deleted).');
+        debugPrint('[Firestore] Cloud is empty for this tenant! Pushing default app data up to cloud...');
+        if (menu.isEmpty) menu = List.from(newDefaultMenu);
+        if (categories.isEmpty) categories = List.from(newDefaultCategories);
+        if (tables.isEmpty) tables = List.from(defaultTablesList);
+        await FirestoreService.syncCategories(categories, saasLicenseKey);
+        await FirestoreService.syncMenu(menu, saasLicenseKey);
+        await FirestoreService.syncTables(tables, saasLicenseKey);
       }
     } catch (e) {
       debugPrint('[Firestore] Error syncing data from cloud: $e');
@@ -1322,6 +1428,10 @@ class AppState extends ChangeNotifier {
 
   Future<void> pushLocalDataToCloud() async {
     if (saasLicenseKey.isEmpty) return;
+    if (!_hasTenantDb) {
+      debugPrint('[LOCAL MODE] Skipping cloud push — no tenant DB configured.');
+      return;
+    }
     cloudStatus = 'syncing';
     notifyListeners();
     try {
@@ -1334,7 +1444,12 @@ class AppState extends ChangeNotifier {
       await FirestoreService.syncMenu(menu, saasLicenseKey);
       await FirestoreService.syncCategories(categories, saasLicenseKey);
       await FirestoreService.syncInvoices(invoices, saasLicenseKey);
-      await FirestoreService.syncDiagnostics(btLogs, saasLicenseKey);
+      // Throttle diagnostic sync to once per 5 minutes to save bandwidth/quota
+      final lastSync = LocalStorageHelper.getString('ahar_last_bt_sync');
+      if (lastSync == null || DateTime.now().difference(DateTime.parse(lastSync)).inMinutes >= 5) {
+        await FirestoreService.syncDiagnostics(btLogs, saasLicenseKey);
+        LocalStorageHelper.setString('ahar_last_bt_sync', DateTime.now().toIso8601String());
+      }
       cloudStatus = 'connected';
       notifyListeners();
       debugPrint('[Firestore] Successfully pushed all local data to cloud.');
@@ -1440,63 +1555,68 @@ class AppState extends ChangeNotifier {
 
   Future<void> updateHeartbeatOnCloud() async {
     if (saasActivationRequired || saasLicenseKey.isEmpty) return;
+    if (!_hasTenantDb) {
+      debugPrint('[LOCAL MODE] Skipping heartbeat — no tenant DB.');
+      return;
+    }
 
     try {
-      final dbObj = await fetchSaaSDatabaseFromCloud();
-      if (dbObj != null) {
-        final List licensesList = dbObj['licenses'] ?? [];
-        int foundIdx = -1;
-        for (int i = 0; i < licensesList.length; i++) {
-          final l = licensesList[i];
-          if (l is Map && l['key'].toString().trim().toUpperCase() == saasLicenseKey.trim().toUpperCase()) {
-            foundIdx = i;
-            break;
-          }
-        }
+      // Use locally cached DB instead of fetching from cloud every time
+      final rawDb = LocalStorageHelper.getString('saas_central_db');
+      if (rawDb == null) return;
+      final dbObj = jsonDecode(rawDb) as Map<String, dynamic>;
 
-        if (foundIdx != -1) {
-          final nowIso = DateTime.now().toIso8601String();
-          licensesList[foundIdx]['lastSeen'] = nowIso;
-          
-          final success = await saveSaaSDatabaseToCloud(dbObj);
-          if (success) {
-            debugPrint('[DEBUG] Heartbeat updated on cloud successfully.');
-            cloudStatus = 'connected';
-            
-            final l = licensesList[foundIdx];
-            final isActive = l['active'] ?? false;
-            final expiry = l['expiryDate'] ?? DateTime.now().add(const Duration(days: 30)).toIso8601String();
-            final rate = l['rate'] ?? 1200;
-            final isRejected = l['paymentRejected'] == true;
-            final cloudLimit = l['cloudInvoicesLimit'] ?? 100;
-            if (cloudInvoicesLimit != cloudLimit) {
-              updateCloudInvoicesLimit(cloudLimit);
-            }
-            
-            String statusVal = isActive ? 'active' : 'paused';
-            final List pendingRenewals = dbObj['pendingRenewals'] ?? [];
-            final isPending = pendingRenewals.any((req) => req is Map && req['appId'] == appId);
-            if (isPending) {
-              statusVal = 'pending_verification';
-            } else if (isRejected) {
-              statusVal = 'rejected';
-            }
-            
-            final licenseData = {
-              'status': statusVal,
-              'type': 'subscription',
-              'expiryDate': expiry,
-              'rate': rate,
-              'paymentRejected': isRejected,
-              'lastSeen': nowIso
-            };
-            await LocalStorageHelper.setString('saas_license_$appId', jsonEncode(licenseData));
-            checkSaaSStatus();
-          } else {
-            cloudStatus = 'offline';
-          }
-          notifyListeners();
+      final List licensesList = dbObj['licenses'] ?? [];
+      int foundIdx = -1;
+      for (int i = 0; i < licensesList.length; i++) {
+        final l = licensesList[i];
+        if (l is Map && l['key'].toString().trim().toUpperCase() == saasLicenseKey.trim().toUpperCase()) {
+          foundIdx = i;
+          break;
         }
+      }
+
+      if (foundIdx != -1) {
+        final nowIso = DateTime.now().toIso8601String();
+        licensesList[foundIdx]['lastSeen'] = nowIso;
+        
+        // Update locally first for responsiveness, then async push
+        await LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObj));
+        saveSaaSDatabaseToCloud(dbObj).then((success) {
+           if (success) debugPrint('[DEBUG] Heartbeat updated on cloud successfully.');
+        });
+        
+        cloudStatus = 'connected';
+        final l = licensesList[foundIdx];
+        final isActive = l['active'] ?? false;
+        final expiry = l['expiryDate'] ?? DateTime.now().add(const Duration(days: 30)).toIso8601String();
+        final rate = l['rate'] ?? 1200;
+        final isRejected = l['paymentRejected'] == true;
+        final cloudLimit = l['cloudInvoicesLimit'] ?? 100;
+        if (cloudInvoicesLimit != cloudLimit) {
+          updateCloudInvoicesLimit(cloudLimit);
+        }
+        
+        String statusVal = isActive ? 'active' : 'paused';
+        final List pendingRenewals = dbObj['pendingRenewals'] ?? [];
+        final isPending = pendingRenewals.any((req) => req is Map && req['appId'] == appId);
+        if (isPending) {
+          statusVal = 'pending_verification';
+        } else if (isRejected) {
+          statusVal = 'rejected';
+        }
+        
+        final licenseData = {
+          'status': statusVal,
+          'type': 'subscription',
+          'expiryDate': expiry,
+          'rate': rate,
+          'paymentRejected': isRejected,
+          'lastSeen': nowIso
+        };
+        await LocalStorageHelper.setString('saas_license_$appId', jsonEncode(licenseData));
+        checkSaaSStatus();
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('[DEBUG] Error updating heartbeat on cloud: $e');
@@ -1533,7 +1653,7 @@ class AppState extends ChangeNotifier {
           final uppercaseSavedKey = savedKey.trim().toUpperCase();
           final keyExists = licensesList.any((l) => l['key'].toString().trim().toUpperCase() == uppercaseSavedKey);
           
-          final defaultKeys = ['LIC-ABCD-1234-WXYZ', 'LIC-EFGH-5678-UVWX', 'LIC-IJKL-9012-QRST', 'LIC-MNOP-3456-YZAB', 'LIC-AHAR-FOOD-2026'];
+          final defaultKeys = ['LIC-ABCD-1234-WXYZ', 'LIC-EFGH-5678-UVWX', 'LIC-IJKL-9012-QRST', 'LIC-MNOP-3456-YZAB', 'LIC-AHAR-FOOD-2026', 'LIC-JQEL-CG2V-2ECX'];
           if (!keyExists && defaultKeys.contains(uppercaseSavedKey)) {
             needsReset = true;
           }
@@ -1562,7 +1682,24 @@ class AppState extends ChangeNotifier {
           {'id': 1002, 'key': 'LIC-EFGH-5678-UVWX', 'customerId': 1, 'appId': 102, 'rate': 800, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 25)).toIso8601String()},
           {'id': 1003, 'key': 'LIC-IJKL-9012-QRST', 'customerId': 2, 'appId': 101, 'rate': 1500, 'active': false, 'expiryDate': DateTime.now().subtract(const Duration(days: 2)).toIso8601String()},
           {'id': 1004, 'key': 'LIC-MNOP-3456-YZAB', 'customerId': 3, 'appId': 103, 'rate': 2500, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 5)).toIso8601String()},
-          {'id': 1005, 'key': 'LIC-AHAR-FOOD-2026', 'customerId': 1, 'appId': 104, 'rate': 1200, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 30)).toIso8601String()}
+          {'id': 1005, 'key': 'LIC-AHAR-FOOD-2026', 'customerId': 1, 'appId': 104, 'rate': 1200, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 30)).toIso8601String()},
+          {
+            'id': 1006, 
+            'key': 'LIC-JQEL-CG2V-2ECX', 
+            'customerId': 1, 
+            'appId': 104, 
+            'rate': 1200, 
+            'active': true, 
+            'expiryDate': DateTime.now().add(const Duration(days: 365)).toIso8601String(),
+            'dbConfig': {
+              'apiKey': 'AIzaSyC1FE1COnXA4iA0vArfj_nPLT9WejbRgoc',
+              'authDomain': 'ahar-77377.firebaseapp.com',
+              'projectId': 'ahar-77377',
+              'storageBucket': 'ahar-77377.firebasestorage.app',
+              'messagingSenderId': '420187507844',
+              'appId': '1:420187507844:web:cd84759e03d1604b2c46d1'
+            }
+          }
         ],
         'activity': [],
         'pendingRenewals': []
@@ -1610,25 +1747,9 @@ class AppState extends ChangeNotifier {
               ? List.from(foundLicense['devices'])
               : [];
           if (!devices.contains(currentDevId)) {
-            final deviceLimit = foundLicense['deviceLimit'] ?? 2;
-            if (devices.length < deviceLimit) {
-              // Auto-register current device if under limit
-              devices.add(currentDevId);
-              foundLicense['devices'] = devices;
-              saveSaaSDatabaseToCloud(dbObj).then((success) {
-                if (success) {
-                  debugPrint('[DEBUG] checkSaaSStatus: Auto-registered device ID ($currentDevId) on cloud.');
-                }
-              });
-            } else {
-              // Exceeds limit - Lock SaaS instead of deactivating local app settings
-              debugPrint('[DEBUG] checkSaaSStatus: Device ID ($currentDevId) is not registered and limit ($deviceLimit) reached.');
-              saasLocked = true;
-              saasTitle = "Device Limit Exceeded";
-              saasAnnouncement = "Limit is $deviceLimit devices. Contact Admin.";
-              notifyListeners();
-              return;
-            }
+            debugPrint('[DEBUG] checkSaaSStatus: Device ID ($currentDevId) is not registered on cloud. Deactivating app.');
+            deactivateApp();
+            return;
           }
         }
       } catch (_) {}
@@ -1746,7 +1867,7 @@ class AppState extends ChangeNotifier {
           final keyExists = licensesList.any((l) => l['key'].toString().trim().toUpperCase() == uppercaseKey);
           debugPrint('[DEBUG] Key "$uppercaseKey" exists in current rawDb: $keyExists');
           
-          final defaultKeys = ['LIC-ABCD-1234-WXYZ', 'LIC-EFGH-5678-UVWX', 'LIC-IJKL-9012-QRST', 'LIC-MNOP-3456-YZAB', 'LIC-AHAR-FOOD-2026'];
+          final defaultKeys = ['LIC-ABCD-1234-WXYZ', 'LIC-EFGH-5678-UVWX', 'LIC-IJKL-9012-QRST', 'LIC-MNOP-3456-YZAB', 'LIC-AHAR-FOOD-2026', 'LIC-JQEL-CG2V-2ECX'];
           if (!keyExists && defaultKeys.contains(uppercaseKey)) {
             debugPrint('[DEBUG] Key is a known default key but missing in current rawDb. Forcing reset.');
             needsReset = true;
@@ -1777,7 +1898,24 @@ class AppState extends ChangeNotifier {
           {'id': 1002, 'key': 'LIC-EFGH-5678-UVWX', 'customerId': 1, 'appId': 102, 'rate': 800, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 25)).toIso8601String()},
           {'id': 1003, 'key': 'LIC-IJKL-9012-QRST', 'customerId': 2, 'appId': 101, 'rate': 1500, 'active': false, 'expiryDate': DateTime.now().subtract(const Duration(days: 2)).toIso8601String()},
           {'id': 1004, 'key': 'LIC-MNOP-3456-YZAB', 'customerId': 3, 'appId': 103, 'rate': 2500, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 5)).toIso8601String()},
-          {'id': 1005, 'key': 'LIC-AHAR-FOOD-2026', 'customerId': 1, 'appId': 104, 'rate': 1200, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 30)).toIso8601String()}
+          {'id': 1005, 'key': 'LIC-AHAR-FOOD-2026', 'customerId': 1, 'appId': 104, 'rate': 1200, 'active': true, 'expiryDate': DateTime.now().add(const Duration(days: 30)).toIso8601String()},
+          {
+            'id': 1006, 
+            'key': 'LIC-JQEL-CG2V-2ECX', 
+            'customerId': 1, 
+            'appId': 104, 
+            'rate': 1200, 
+            'active': true, 
+            'expiryDate': DateTime.now().add(const Duration(days: 365)).toIso8601String(),
+            'dbConfig': {
+              'apiKey': 'AIzaSyC1FE1COnXA4iA0vArfj_nPLT9WejbRgoc',
+              'authDomain': 'ahar-77377.firebaseapp.com',
+              'projectId': 'ahar-77377',
+              'storageBucket': 'ahar-77377.firebasestorage.app',
+              'messagingSenderId': '420187507844',
+              'appId': '1:420187507844:web:cd84759e03d1604b2c46d1'
+            }
+          }
         ],
         'activity': [],
         'pendingRenewals': []
@@ -1799,6 +1937,7 @@ class AppState extends ChangeNotifier {
       for (var l in licensesList) {
         debugPrint(' - Key: "${l['key']}", appId: ${l['appId']}, active: ${l['active']}');
       }
+
 
       Map<String, dynamic>? foundLicense;
       for (var l in licensesList) {
@@ -1871,12 +2010,12 @@ class AppState extends ChangeNotifier {
         }
 
         if (dbChanged) {
-          // Save the updated central DB back to Firestore
+          // Save the updated central DB back to Firestore (non-blocking for local-only mode)
           final saveSuccess = await saveSaaSDatabaseToCloud(dbObjDecoded);
           if (!saveSuccess) {
-            debugPrint('[DEBUG] Failed to save database on cloud.');
-            licenseErrorMessage = 'Cloud connection error. Please try again.';
-            return false;
+            debugPrint('[DEBUG] Failed to save database on cloud. Continuing with local activation.');
+            // Save locally so device info is not lost
+            LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObjDecoded));
           }
         }
         appId = targetAppId;
@@ -1885,6 +2024,22 @@ class AppState extends ChangeNotifier {
         
         LocalStorageHelper.setString('ahar_license_key', key);
         LocalStorageHelper.setString('ahar_app_id', targetAppId.toString());
+
+        // --- DYNAMIC DATABASE INITIALIZATION ---
+        if (foundLicense['dbConfig'] != null) {
+          final dbConfigStr = jsonEncode(foundLicense['dbConfig']);
+          await LocalStorageHelper.setString('saas_tenant_db_config_$targetAppId', dbConfigStr);
+          _hasTenantDb = true;
+          try {
+            await TenantDbManager.initialize(Map<String, dynamic>.from(foundLicense['dbConfig']));
+            debugPrint('[DEBUG] Tenant database initialized from cloud config.');
+          } catch (e) {
+            debugPrint('[DEBUG] Failed to initialize tenant DB: $e');
+          }
+        } else {
+          _hasTenantDb = false;
+          debugPrint('[DEBUG] No dbConfig for this license. App will run in LOCAL-ONLY mode.');
+        }
 
         // Sync local storage state
         final isActive = foundLicense['active'] ?? false;
@@ -1900,8 +2055,20 @@ class AppState extends ChangeNotifier {
         // Start heartbeat immediately on successful activation
         updateHeartbeatOnCloud();
 
-        // Sync data from cloud for this license key
-        await syncDataFromCloud();
+        if (_hasTenantDb) {
+          // Sync data from cloud for this license key (CLOUD MODE)
+          await syncDataFromCloud();
+        } else {
+          // LOCAL MODE: Load default menu data locally
+          menu = List.from(newDefaultMenu);
+          categories = List.from(newDefaultCategories);
+          tables = List.from(defaultTablesList);
+          saveMenu();
+          saveCategories();
+          saveTables();
+          cloudStatus = 'local';
+          debugPrint('[LOCAL MODE] App activated in local-only mode. Data stored on device.');
+        }
         await fetchSaaSGlobalSettingsFromCloud();
 
         checkSaaSStatus();
@@ -1918,17 +2085,53 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
-  void deactivateApp() {
+  Future<bool> deactivateApp() async {
+    final currentDevId = getOrCreateDeviceId();
+    bool cloudRemoved = false;
+    if (saasLicenseKey.isNotEmpty) {
+      try {
+        final dbObj = await fetchSaaSDatabaseFromCloud();
+        if (dbObj != null) {
+          final List licensesList = dbObj['licenses'] ?? [];
+          int foundIdx = -1;
+          for (int i = 0; i < licensesList.length; i++) {
+            final l = licensesList[i];
+            if (l is Map && l['key'].toString().trim().toUpperCase() == saasLicenseKey.trim().toUpperCase()) {
+              foundIdx = i;
+              break;
+            }
+          }
+
+          if (foundIdx != -1) {
+            final List devices = List.from(licensesList[foundIdx]['devices'] ?? []);
+            if (devices.contains(currentDevId)) {
+              devices.remove(currentDevId);
+              licensesList[foundIdx]['devices'] = devices;
+              await saveSaaSDatabaseToCloud(dbObj);
+              debugPrint('[DEBUG] Device $currentDevId removed from cloud during deactivation.');
+              cloudRemoved = true;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[DEBUG] Error removing device from cloud during deactivation: $e');
+      }
+    }
+
     LocalStorageHelper.remove('ahar_license_key');
     LocalStorageHelper.remove('ahar_app_id');
+    LocalStorageHelper.remove('saas_tenant_db_config_$appId');
     
     saasLicenseKey = "";
     saasActivationRequired = true;
     saasLocked = false;
     saasRegisteredDevices = [];
+    _hasTenantDb = false;
     
     notifyListeners();
+    return cloudRemoved;
   }
+
 
   Future<void> removeDeviceFromLicenseCloud(String deviceId) async {
     if (saasLicenseKey.isEmpty) return;
@@ -2127,13 +2330,18 @@ class AppState extends ChangeNotifier {
     final rawMap = activeCarts.map((key, value) => MapEntry(key, value.map((i) => i.toJson()).toList()));
     LocalStorageHelper.setString('ahar_active_carts', jsonEncode(rawMap));
     LocalStorageHelper.setString('ahar_table_occupied_times', jsonEncode(tableOccupiedTimes));
+    
+    // Debounced Firestore sync: waits 10s after last cart change to avoid excessive writes
     if (saasLicenseKey.isNotEmpty) {
-      FirestoreService.syncTables(
-        tables,
-        saasLicenseKey,
-        activeCarts: activeCarts,
-        tableOccupiedTimes: tableOccupiedTimes,
-      ).catchError((_) {});
+      _cartSyncDebounce?.cancel();
+      _cartSyncDebounce = Timer(const Duration(seconds: 30), () {
+        FirestoreService.syncTables(
+          tables,
+          saasLicenseKey,
+          activeCarts: activeCarts,
+          tableOccupiedTimes: tableOccupiedTimes,
+        ).catchError((_) {});
+      });
     }
   }
 
@@ -2200,7 +2408,7 @@ class AppState extends ChangeNotifier {
 
   void selectTable(String tableId) {
     selectedTableId = tableId;
-    currentCategory = 'PAPER DHOSA';
+    currentCategory = 'SANDWICH';
     searchBarVisible = false;
     menuSearchQuery = '';
     saveNavigationState();
@@ -3218,9 +3426,6 @@ class AppState extends ChangeNotifier {
   Future<void> resetMenuToDefaultsAndSync() async {
     menu = List.from(defaultMenu);
     saveMenu();
-    if (saasLicenseKey.isNotEmpty) {
-      await FirestoreService.syncMenu(menu, saasLicenseKey);
-    }
     notifyListeners();
   }
 
@@ -3297,7 +3502,7 @@ class AppState extends ChangeNotifier {
   void _startInternetCheckTimer() {
     _internetCheckTimer?.cancel();
     _runInternetCheck();
-    _internetCheckTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _internetCheckTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _runInternetCheck();
     });
   }
@@ -3307,18 +3512,9 @@ class AppState extends ChangeNotifier {
     if (connected != hasRealInternet) {
       hasRealInternet = connected;
       if (!hasRealInternet) {
-        cloudStatus = 'offline';
+        if (_hasTenantDb) cloudStatus = 'offline';
       } else {
-        cloudStatus = 'syncing';
-        try {
-          await FirestoreService.syncInvoices(invoices, saasLicenseKey);
-          await FirestoreService.syncTables(tables, saasLicenseKey);
-          await FirestoreService.syncMenu(menu, saasLicenseKey);
-          await FirestoreService.syncCategories(categories, saasLicenseKey);
-          cloudStatus = 'connected';
-        } catch (_) {
-          cloudStatus = 'offline';
-        }
+        cloudStatus = 'connected';
       }
       notifyListeners();
     }
@@ -3736,7 +3932,7 @@ class AppState extends ChangeNotifier {
 
         if (firstIndex != -1) {
           final inv = invoices[firstIndex];
-          final menuItem = menu.isNotEmpty ? menu.first : MenuItem(id: 1, name: "Toast Sandwich", price: 90, category: "PAPER DHOSA");
+          final menuItem = menu.isNotEmpty ? menu.first : MenuItem(id: 1, name: "Toast Sandwich", price: 50, category: "SANDWICH");
           
           int bestPrice = 0;
           for (int p = 0; p <= targetTotal; p++) {

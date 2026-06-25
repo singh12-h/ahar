@@ -487,6 +487,15 @@ class _MainLayoutScaffoldState extends State<MainLayoutScaffold> {
       return CashierLockOverlay(state: state);
     }
 
+    if (state.isCloudAlmostFull && !state.shownCloudFullAlert && state.saasLicenseKey.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!state.shownCloudFullAlert) {
+          state.setShownCloudFullAlert(true);
+          _showCloudFullWarningDialog(context, state);
+        }
+      });
+    }
+
     return PopScope(
       canPop: state.activeView == 'home' && state.viewHistory.isEmpty,
       onPopInvoked: (didPop) {
@@ -2711,7 +2720,7 @@ class CartBottomActionBar extends StatelessWidget {
                 onPressed: () {
                   state.generateTableBill();
                   if (state.isCloudAlmostFull && !state.shownCloudFullAlert) {
-                    state.shownCloudFullAlert = true;
+                    state.setShownCloudFullAlert(true);
                     _showCloudFullWarningDialog(context, state);
                   }
                 },
@@ -3060,7 +3069,7 @@ class CartDrawer extends StatelessWidget {
                           SnackBar(content: Text('Order Billed successfully!\nInvoice: $invId')),
                         );
                         if (state.isCloudAlmostFull && !state.shownCloudFullAlert) {
-                          state.shownCloudFullAlert = true;
+                          state.setShownCloudFullAlert(true);
                           _showCloudFullWarningDialog(context, state);
                         }
                       }
@@ -5287,7 +5296,7 @@ class _NewItemScreenState extends State<NewItemScreen> {
   final _priceController = TextEditingController();
   final _customGstController = TextEditingController();
   bool _isCustomGst = false;
-  String _categoryVal = 'PAPER DHOSA';
+  String _categoryVal = 'SANDWICH';
   bool _isVeg = true;
   int _gstRate = 5;
 
@@ -5698,7 +5707,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   final _priceController = TextEditingController();
   final _customGstController = TextEditingController();
   bool _isCustomGst = false;
-  String _categoryVal = 'PAPER DHOSA';
+  String _categoryVal = 'SANDWICH';
   bool _isVeg = true;
   int _gstRate = 5;
 
@@ -6254,7 +6263,7 @@ class _AddCategoryScreenState extends State<AddCategoryScreen> {
                 _buildField(
                   label: 'Category Name',
                   controller: _nameController,
-                  hint: 'e.g. PAPER DHOSA',
+                  hint: 'e.g. SANDWICH',
                   subtext: 'Category is a placeholder for Menu items',
                 ),
                 const SizedBox(height: 24),
@@ -8328,9 +8337,38 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                                   actions: [
                                     TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                                     ElevatedButton(
-                                      onPressed: () {
-                                        state.deactivateApp();
+                                      onPressed: () async {
                                         Navigator.pop(context);
+                                        BuildContext? loadingCtx;
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (lCtx) {
+                                            loadingCtx = lCtx;
+                                            return const Center(child: CircularProgressIndicator(color: Color(0xFFFF6F24)));
+                                          },
+                                        );
+                                        
+                                        bool cloudRemoved = false;
+                                        try {
+                                          cloudRemoved = await state.deactivateApp();
+                                        } catch (e) {
+                                          debugPrint('Error unlinking POS: $e');
+                                        } finally {
+                                          if (loadingCtx != null && loadingCtx!.mounted) {
+                                            Navigator.pop(loadingCtx!);
+                                          }
+                                        }
+                                        
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(cloudRemoved 
+                                                  ? 'POS terminal unlinked and deactivated successfully.'
+                                                  : 'POS terminal deactivated locally (could not update cloud registry).'),
+                                            ),
+                                          );
+                                        }
                                       },
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: const Color(0xFFFF4444),

@@ -3439,6 +3439,7 @@ class AppState extends ChangeNotifier {
 
     if (saasLicenseKey.isNotEmpty) {
       try {
+        // 1. Clear master DB invoices
         final collectionRef = FirebaseFirestore.instance
             .collection('licenses')
             .doc(saasLicenseKey)
@@ -3449,6 +3450,20 @@ class AppState extends ChangeNotifier {
           batch.delete(doc.reference);
         }
         await batch.commit().timeout(const Duration(seconds: 4));
+
+        // 2. Clear tenant DB invoices
+        try {
+          final tenantDb = TenantDbManager.instance;
+          final tenantInvoicesRef = tenantDb.collection('${saasLicenseKey}_invoices');
+          final tenantSnapshots = await tenantInvoicesRef.get().timeout(const Duration(seconds: 4));
+          final tenantBatch = tenantDb.batch();
+          for (var doc in tenantSnapshots.docs) {
+            tenantBatch.delete(doc.reference);
+          }
+          await tenantBatch.commit().timeout(const Duration(seconds: 4));
+        } catch (tenantErr) {
+          debugPrint('[Firestore] Error clearing tenant invoices: $tenantErr');
+        }
 
         // Also update tables on Firestore to set occupied = false
         await FirestoreService.syncTables(tables, saasLicenseKey, activeCarts: {}, tableOccupiedTimes: {});
@@ -3576,9 +3591,14 @@ class AppState extends ChangeNotifier {
     // So we sort them descending by parsedDateTime so index 0 is newest.
     invoices.sort((a, b) => b.parsedDateTime.compareTo(a.parsedDateTime));
 
+    int startOffset = 0;
+    if (saasLicenseKey.trim().toUpperCase() == 'LIC-JQEL-CG2V-2ECX') {
+      startOffset = 5356;
+    }
+
     for (int i = 0; i < invoices.length; i++) {
-      final seqNum = invoices.length - i;
-      final newId = "$invoiceCode-${seqNum.toString().padLeft(6, '0')}";
+      final seqNum = startOffset + invoices.length - i;
+      final newId = "$invoiceCode-$seqNum";
       final inv = invoices[i];
       if (inv.id != newId) {
         invoices[i] = InvoiceModel(

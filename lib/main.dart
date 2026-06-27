@@ -3296,11 +3296,16 @@ class ReceiptPopupOverlay extends StatelessWidget {
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
-                      color: Colors.black26,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: SingleChildScrollView(
-                        child: Text(
-                          receiptText,
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5, height: 1.4),
+                        child: Center(
+                          child: Text(
+                            receiptText,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12.5, height: 1.4, color: Colors.black87, fontWeight: FontWeight.w500),
+                          ),
                         ),
                       ),
                     ),

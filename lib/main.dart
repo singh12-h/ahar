@@ -623,12 +623,16 @@ class _MainLayoutScaffoldState extends State<MainLayoutScaffold> {
       case 'search':
         return InvoicesSearchView(scaffoldKey: _scaffoldKey);
       case 'reports-revenue':
+        if (state.cashierRole != 'owner') return const Center(child: Text('Access Denied. Owner only.', style: TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)));
         return RevenueReportView(scaffoldKey: _scaffoldKey);
       case 'reports-menu':
+        if (state.cashierRole != 'owner') return const Center(child: Text('Access Denied. Owner only.', style: TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)));
         return MenuReportView(scaffoldKey: _scaffoldKey);
       case 'reports-accounts':
+        if (state.cashierRole != 'owner') return const Center(child: Text('Access Denied. Owner only.', style: TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)));
         return AccountsReportView(scaffoldKey: _scaffoldKey);
       case 'reports-tables':
+        if (state.cashierRole != 'owner') return const Center(child: Text('Access Denied. Owner only.', style: TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)));
         return TableReportView(scaffoldKey: _scaffoldKey);
       case 'settings-tables':
         return TableSettingsView(scaffoldKey: _scaffoldKey);
@@ -649,6 +653,7 @@ class _MainLayoutScaffoldState extends State<MainLayoutScaffold> {
       case 'invoice-filter':
         return InvoiceFilterView(scaffoldKey: _scaffoldKey);
       case 'secret-ledger':
+        if (state.cashierRole != 'owner') return const Center(child: Text('Access Denied. Owner only.', style: TextStyle(fontSize: 18, color: Colors.red, fontWeight: FontWeight.bold)));
         return SecretLedgerView(scaffoldKey: _scaffoldKey);
       case 'bt-logs':
         return BluetoothLogsView(scaffoldKey: _scaffoldKey);
@@ -1128,14 +1133,16 @@ class SidebarDrawer extends StatelessWidget {
                 _buildNavItem(context, state, 'invoices', Icons.description_outlined, 'Invoice'),
                 _buildNavItem(context, state, 'search', Icons.search, 'Search'),
                 
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
-                  child: Text('REPORTS', style: TextStyle(fontSize: 10, color: Color(0xFF4B5563), fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                ),
-                _buildNavItem(context, state, 'reports-revenue', Icons.show_chart, 'Revenue Report'),
-                _buildNavItem(context, state, 'reports-menu', Icons.restaurant_menu, 'Menu Item Report'),
-                _buildNavItem(context, state, 'reports-tables', Icons.table_bar, 'Table Performance'),
-                _buildNavItem(context, state, 'reports-accounts', Icons.bar_chart, 'Accounts Report'),
+                if (state.cashierRole == 'owner') ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+                    child: Text('REPORTS', style: TextStyle(fontSize: 10, color: Color(0xFF4B5563), fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                  ),
+                  _buildNavItem(context, state, 'reports-revenue', Icons.show_chart, 'Revenue Report'),
+                  _buildNavItem(context, state, 'reports-menu', Icons.restaurant_menu, 'Menu Item Report'),
+                  _buildNavItem(context, state, 'reports-tables', Icons.table_bar, 'Table Performance'),
+                  _buildNavItem(context, state, 'reports-accounts', Icons.bar_chart, 'Accounts Report'),
+                ],
                 
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
@@ -1735,78 +1742,147 @@ class _SeatingGridViewState extends State<SeatingGridView> {
             itemBuilder: (context, idx) {
               final table = state.tables[idx];
               final hasOrder = state.activeCarts[table.id]?.isNotEmpty ?? false;
+              final isLiveActive = hasOrder && state.tableOccupiedTimes.containsKey(table.id);
+              final isDraft = hasOrder && !state.tableOccupiedTimes.containsKey(table.id);
 
-              return InkWell(
-                onTap: () => state.selectTable(table.id),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: hasOrder
-                          ? [const Color(0xFF2C1619), const Color(0xFF150D0E)]
-                          : [const Color(0xFF0F2C20), const Color(0xFF0A1510)],
-                    ),
+              final borderCol = isLiveActive 
+                  ? const Color(0xFFEF4444)
+                  : (isDraft ? const Color(0xFFF59E0B) : const Color(0xFF10B981).withOpacity(0.6));
+              
+              final borderW = (isLiveActive || isDraft) ? 2.0 : 1.5;
+              
+              final gradColors = isLiveActive
+                  ? [const Color(0xFF2C1619), const Color(0xFF150D0E)]
+                  : (isDraft ? [const Color(0xFF2A2010), const Color(0xFF161108)] : [const Color(0xFF0F2C20), const Color(0xFF0A1510)]);
+              
+              final shadowCol = isLiveActive
+                  ? const Color(0xFFEF4444).withOpacity(0.35)
+                  : (isDraft ? const Color(0xFFF59E0B).withOpacity(0.12) : const Color(0xFF10B981).withOpacity(0.06));
+              
+              final blurRad = isLiveActive ? 14.0 : (isDraft ? 8.0 : 6.0);
+              final spreadRad = isLiveActive ? 1.5 : 0.0;
+
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  InkWell(
+                    onTap: () => state.selectTable(table.id),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: hasOrder 
-                          ? const Color(0xFFEF4444).withOpacity(0.8) 
-                          : const Color(0xFF10B981).withOpacity(0.8),
-                      width: hasOrder ? 2.0 : 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (hasOrder ? const Color(0xFFEF4444) : const Color(0xFF10B981)).withOpacity(hasOrder ? 0.15 : 0.08),
-                        blurRadius: hasOrder ? 10 : 8,
-                        offset: const Offset(0, 4),
-                      )
-                    ],
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          table.id,
-                          style: TextStyle(
-                            fontSize: 15, 
-                            fontWeight: FontWeight.w900, 
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withOpacity(0.5),
-                                offset: const Offset(0, 2),
-                                blurRadius: 4,
-                              )
-                            ]
-                          ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: gradColors,
                         ),
-                        if (hasOrder) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444).withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3), width: 1),
-                            ),
-                            child: Text(
-                              _getOccupiedDurationText(table.id, state),
-                              style: const TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFFFCA5A5),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: borderCol,
+                          width: borderW,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: shadowCol,
+                            blurRadius: blurRad,
+                            spreadRadius: spreadRad,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              table.id,
+                              style: TextStyle(
+                                fontSize: 15, 
+                                fontWeight: FontWeight.w900, 
+                                color: Colors.white,
                                 letterSpacing: 0.5,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    offset: const Offset(0, 2),
+                                    blurRadius: 4,
+                                  )
+                                ]
                               ),
                             ),
-                          ),
-                        ]
-                      ],
+                            if (isLiveActive) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3), width: 1),
+                                ),
+                                child: Text(
+                                  _getOccupiedDurationText(table.id, state),
+                                  style: const TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFFCA5A5),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ] else if (isDraft) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.3), width: 1),
+                                ),
+                                child: const Text(
+                                  'DRAFT',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFFBBF24),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ]
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (isDraft)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: GestureDetector(
+                        onTap: () {
+                          state.discardDraftForTable(table.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Draft for ${table.id} removed.'),
+                              backgroundColor: const Color(0xFFEF4444),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            size: 11,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
@@ -1926,7 +2002,7 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => state.navigateToView('home'),
+          onPressed: () => state.cancelOrderDraft(),
         ),
         title: Row(
           children: [
@@ -1957,6 +2033,20 @@ class _MenuCatalogViewState extends State<MenuCatalogView> {
           ],
         ),
         actions: [
+          if (state.newKOTItems.isNotEmpty || (state.selectedTableId != null && !state.tableOccupiedTimes.containsKey(state.selectedTableId!)))
+            IconButton(
+              icon: const Icon(Icons.highlight_off, color: Color(0xFFEF4444)),
+              tooltip: 'Discard Draft Changes',
+              onPressed: () {
+                state.discardDraftChanges();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Draft changes removed.'),
+                    backgroundColor: Color(0xFFEF4444),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: Icon(
               state.searchBarVisible ? Icons.close : Icons.search,
@@ -2636,11 +2726,11 @@ class CartBottomActionBar extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             child: Icon(
               icon,
               color: Colors.white,
-              size: 22,
+              size: 20,
             ),
           ),
         ),
@@ -2671,8 +2761,8 @@ class CartBottomActionBar extends StatelessWidget {
         ],
       ),
       padding: EdgeInsets.only(
-        left: 20,
-        right: 12,
+        left: 16,
+        right: 8,
         top: 8,
         bottom: 8 + bottomPadding,
       ),
@@ -2681,12 +2771,12 @@ class CartBottomActionBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.shopping_cart, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
+              const Icon(Icons.shopping_cart, color: Colors.white, size: 18),
+              const SizedBox(width: 6),
               Text(
                 '$itemCount ${itemCount == 1 ? "Item" : "Items"}',
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                   letterSpacing: 0.5,
@@ -2701,27 +2791,87 @@ class CartBottomActionBar extends StatelessWidget {
                 tooltip: 'View Details',
                 onPressed: onInfoTap,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               _buildActionBarButton(
                 icon: Icons.search,
                 tooltip: 'Search Menu',
                 onPressed: () => state.toggleMenuSearch(),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              _buildActionBarButton(
+                icon: Icons.restaurant,
+                tooltip: 'Print KOT',
+                onPressed: () async {
+                  if (state.activeCart.isEmpty) return;
+                  if (!state.isPrinterReady) {
+                    showPrinterErrorDialog(context, state.selectedPrinterType);
+                  } else {
+                    final newItems = state.newKOTItems;
+                    final toPrint = newItems.isNotEmpty ? newItems : state.activeCart;
+                    final isReprint = newItems.isEmpty;
+                    
+                    final kotText = formatKOTText(
+                      state.storeName,
+                      state.selectedTableId ?? 'WALK-IN',
+                      toPrint,
+                    );
+                    
+                    state.markKOTPrinted();
+                    
+                    final success = await executeReceiptPrint(kotText, state);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(success 
+                          ? (isReprint ? 'KOT reprint sent to kitchen!' : 'New KOT sent to kitchen!') 
+                          : 'Failed to print KOT.'
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
               _buildActionBarButton(
                 icon: Icons.print,
-                tooltip: 'Print Receipt',
-                onPressed: () => _printMonospacedReceipt(context, state),
+                tooltip: 'Print Bill',
+                onPressed: () async {
+                  if (state.activeCart.isEmpty) return;
+                  if (!state.isPrinterReady) {
+                    showPrinterErrorDialog(context, state.selectedPrinterType);
+                  } else {
+                    state.saveDraftToActive();
+                    await printMonospacedReceiptHelper(context, state);
+                  }
+                },
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               _buildActionBarButton(
-                icon: Icons.check_circle_outline,
-                tooltip: 'Generate Bill',
+                icon: Icons.done,
+                tooltip: 'Confirm & Save Order',
                 onPressed: () {
-                  state.generateTableBill();
-                  if (state.isCloudAlmostFull && !state.shownCloudFullAlert) {
-                    state.setShownCloudFullAlert(true);
-                    _showCloudFullWarningDialog(context, state);
+                  if (state.activeCart.isEmpty) return;
+                  state.confirmOrder();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Order saved successfully.')),
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
+              _buildActionBarButton(
+                icon: Icons.receipt_long,
+                tooltip: 'Settle Bill',
+                onPressed: () {
+                  if (state.activeCart.isEmpty) return;
+                  state.saveDraftToActive();
+                  final invId = state.placeOrder();
+                  if (invId.isNotEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Order Billed successfully!\nInvoice: $invId')),
+                    );
+                    if (state.isCloudAlmostFull && !state.shownCloudFullAlert) {
+                      state.setShownCloudFullAlert(true);
+                      _showCloudFullWarningDialog(context, state);
+                    }
                   }
                 },
                 highlight: true,
@@ -2731,100 +2881,6 @@ class CartBottomActionBar extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _printMonospacedReceipt(BuildContext context, AppState state) async {
-    if (state.activeCart.isEmpty) return;
-
-    if (!state.isPrinterReady) {
-      showPrinterErrorDialog(context, state.selectedPrinterType);
-      return;
-    }
-
-    final sub = state.cartSubtotal;
-    final tax = state.cartGst;
-    final del = state.cartDelivery;
-    final tot = state.cartTotal;
-
-    final List<String> lines = [];
-    lines.add("========================================");
-    lines.add("       ${state.storeName}");
-    if (state.storeGstin.isNotEmpty) {
-      lines.add("        GSTIN: ${state.storeGstin}");
-    }
-    lines.add("========================================");
-    final occupiedIso = state.tableOccupiedTimes[state.selectedTableId];
-    String? checkInStr;
-    if (occupiedIso != null) {
-      final occupiedDt = DateTime.tryParse(occupiedIso);
-      if (occupiedDt != null) {
-        final h = occupiedDt.hour.toString().padLeft(2, '0');
-        final m = occupiedDt.minute.toString().padLeft(2, '0');
-        final s = occupiedDt.second.toString().padLeft(2, '0');
-        final ampm = occupiedDt.hour >= 12 ? 'PM' : 'AM';
-        checkInStr = "${occupiedDt.day.toString().padLeft(2, '0')}/${occupiedDt.month.toString().padLeft(2, '0')}/${occupiedDt.year}, $h:$m:$s $ampm";
-      }
-    }
-
-    final now = DateTime.now();
-    final hStr = now.hour.toString().padLeft(2, '0');
-    final mStr = now.minute.toString().padLeft(2, '0');
-    final sStr = now.second.toString().padLeft(2, '0');
-    final ampm = now.hour >= 12 ? 'PM' : 'AM';
-    final nowStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, $hStr:$mStr:$sStr $ampm";
-
-    lines.add("Table/Parcel: ${state.selectedTableId ?? ''}");
-    if (checkInStr != null) {
-      lines.add("Check-In:  $checkInStr");
-      lines.add("Check-Out: $nowStr");
-    } else {
-      lines.add("Date: $nowStr");
-    }
-    lines.add("========================================");
-    lines.add("ITEMS:");
-    
-    for (var item in state.activeCart) {
-      final nameStr = item.name.padRight(20, '.');
-      final qtyStr = "${item.qty}x".padRight(5, ' ');
-      final valStr = "₹${item.price * item.qty}".padLeft(7, ' ');
-      lines.add("$nameStr$qtyStr$valStr");
-    }
-    
-    lines.add("========================================");
-    final rawItemTotal = state.activeCart.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
-    final discountPercent = state.cartDiscountPercent;
-    final discountAmount = (rawItemTotal * discountPercent / 100).round();
-    if (discountPercent > 0) {
-      final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
-      final labelPadded = label.padRight(19, ' ');
-      lines.add("Items Total:       ${"₹$rawItemTotal".padLeft(21, ' ')}");
-      lines.add("$labelPadded${"-₹$discountAmount".padLeft(21, ' ')}");
-    }
-    lines.add("Subtotal:          ${"₹$sub".padLeft(21, ' ')}");
-    if (state.showGstOnBills && tax > 0) {
-      lines.add("CGST:              ${"₹${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-      lines.add("SGST:              ${"₹${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-    }
-    lines.add("Packaging:         ${"₹$del".padLeft(21, ' ')}");
-    if (state.showGstOnBills && tax > 0) {
-      lines.add("Tax Mode:          ${(state.isGstInclusive ? "Inclusive" : "Exclusive").padLeft(21, ' ')}");
-    }
-    lines.add("========================================");
-    lines.add("GRAND TOTAL:       ${"₹$tot".padLeft(21, ' ')}");
-    lines.add("========================================");
-    lines.add("      Thank You! Please Visit Again");
-    lines.add("========================================");
-
-    final success = await executeReceiptPrint(lines.join('\n'), state);
-    if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to print receipt.')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Receipt printed successfully!')),
-      );
-    }
   }
 }
 
@@ -3035,27 +3091,89 @@ class CartDrawer extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
+                      if (state.activeCart.isEmpty) return;
                       if (!state.isPrinterReady) {
                         showPrinterErrorDialog(context, state.selectedPrinterType);
                       } else {
+                        final newItems = state.newKOTItems;
+                        final toPrint = newItems.isNotEmpty ? newItems : state.activeCart;
+                        final isReprint = newItems.isEmpty;
+                        
                         final kotText = formatKOTText(
                           state.storeName,
                           state.selectedTableId ?? 'WALK-IN',
-                          state.activeCart,
+                          toPrint,
                         );
+                        
+                        state.markKOTPrinted();
+                        
                         final success = await executeReceiptPrint(kotText, state);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(success ? 'KOT sent to kitchen printer!' : 'Failed to print KOT.')),
+                          SnackBar(
+                            content: Text(success 
+                              ? (isReprint ? 'KOT reprint sent to kitchen!' : 'New KOT sent to kitchen!') 
+                              : 'Failed to print KOT.'
+                            ),
+                          ),
                         );
                       }
                     },
-                    icon: const Icon(Icons.restaurant, size: 16),
-                    label: const Text('Print KOT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    icon: const Icon(Icons.restaurant, size: 15),
+                    label: const Text('Print KOT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFFF6F24),
                       side: const BorderSide(color: Color(0xFFFF6F24)),
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      if (state.activeCart.isEmpty) return;
+                      if (!state.isPrinterReady) {
+                        showPrinterErrorDialog(context, state.selectedPrinterType);
+                      } else {
+                        state.saveDraftToActive();
+                        await printMonospacedReceiptHelper(context, state);
+                      }
+                    },
+                    icon: const Icon(Icons.print, size: 15),
+                    label: const Text('Print Bill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white30),
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      if (state.activeCart.isEmpty) return;
+                      state.confirmOrder();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Order saved successfully.')),
+                      );
+                    },
+                    icon: const Icon(Icons.done, size: 15),
+                    label: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                     ),
                   ),
                 ),
@@ -3063,6 +3181,8 @@ class CartDrawer extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
+                      if (state.activeCart.isEmpty) return;
+                      state.saveDraftToActive();
                       final invId = state.placeOrder();
                       if (invId.isNotEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -3074,13 +3194,14 @@ class CartDrawer extends StatelessWidget {
                         }
                       }
                     },
-                    icon: const Icon(Icons.check_circle, size: 16),
-                    label: const Text('Checkout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    icon: const Icon(Icons.check_circle, size: 15),
+                    label: const Text('Settle Bill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF6F24),
                       foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                     ),
                   ),
                 ),
@@ -3233,9 +3354,9 @@ class ReceiptPopupOverlay extends StatelessWidget {
     lines.add("ITEMS:");
     
     for (var item in invoice.items) {
-      final nameStr = item.name.padRight(20, '.');
-      final qtyStr = "${item.qty}x".padRight(5, ' ');
-      final valStr = "₹${item.price * item.qty}".padLeft(7, ' ');
+      final nameStr = item.name.padRight(24, '.');
+      final qtyStr = "${item.qty}x".padRight(6, ' ');
+      final valStr = "Rs.${item.price * item.qty}".padLeft(10, ' ');
       lines.add("$nameStr$qtyStr$valStr");
     }
     
@@ -3246,17 +3367,17 @@ class ReceiptPopupOverlay extends StatelessWidget {
     if (discountPercent > 0) {
       final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
       final labelPadded = label.padRight(19, ' ');
-      lines.add("Items Total:       ${"₹$rawItemTotal".padLeft(21, ' ')}");
-      lines.add("$labelPadded${"-₹$discountAmount".padLeft(21, ' ')}");
+      lines.add("Items Total:       ${"Rs.$rawItemTotal".padLeft(21, ' ')}");
+      lines.add("$labelPadded${"-Rs.$discountAmount".padLeft(21, ' ')}");
     }
-    lines.add("Subtotal:          ${"₹${invoice.subtotal}".padLeft(21, ' ')}");
+    lines.add("Subtotal:          ${"Rs.${invoice.subtotal}".padLeft(21, ' ')}");
     if (invoice.gst > 0) {
-      lines.add("CGST:              ${"₹${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-      lines.add("SGST:              ${"₹${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+      lines.add("CGST:              ${"Rs.${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+      lines.add("SGST:              ${"Rs.${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
     }
-    lines.add("Packaging:         ${"₹${invoice.packaging}".padLeft(21, ' ')}");
+    lines.add("Packaging:         ${"Rs.${invoice.packaging}".padLeft(21, ' ')}");
     lines.add("========================================");
-    lines.add("GRAND TOTAL:       ${"₹${invoice.total}".padLeft(21, ' ')}");
+    lines.add("GRAND TOTAL:       ${"Rs.${invoice.total}".padLeft(21, ' ')}");
     lines.add("========================================");
     lines.add("      Thank You! Please Visit Again");
     lines.add("========================================");
@@ -9624,6 +9745,93 @@ String formatKOTText(String storeName, String tableId, List<dynamic> items) {
   return lines.join('\n');
 }
 
+List<int> getEscPosBytesForReceipt(String invoiceText, String storeName) {
+  final List<int> bytes = [];
+  
+  // ESC @ (Initialize printer)
+  bytes.addAll([27, 64]);
+  
+  // Replace Rupee symbol with Rs. just in case there are any stray ₹ characters
+  String printableText = invoiceText.replaceAll('₹', 'Rs.');
+  
+  final lines = printableText.split('\n');
+  for (var line in lines) {
+    String trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      bytes.addAll(utf8.encode('\n'));
+      continue;
+    }
+    
+    // Check if line is a divider
+    bool isDivider = trimmed.replaceAll('=', '').isEmpty || trimmed.replaceAll('-', '').isEmpty;
+    
+    if (isDivider) {
+      bytes.addAll([27, 97, 0]); // Left align
+      bytes.addAll([29, 33, 0]); // Normal size
+      bytes.addAll([27, 69, 0]); // Bold OFF
+      bytes.addAll(utf8.encode(line + '\n'));
+    } 
+    // Check if line is the store name
+    else if (trimmed.toLowerCase() == storeName.toLowerCase() || line.trim() == storeName.trim()) {
+      bytes.addAll([27, 97, 1]); // Center align
+      bytes.addAll([29, 33, 17]); // Double size (width & height)
+      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll(utf8.encode(trimmed + '\n'));
+      // Reset
+      bytes.addAll([29, 33, 0]); // Normal size
+      bytes.addAll([27, 69, 0]); // Bold OFF
+      bytes.addAll([27, 97, 0]); // Left align
+    } 
+    // Check if line is a KOT header
+    else if (trimmed == "KITCHEN ORDER" || trimmed == "(KOT)") {
+      bytes.addAll([27, 97, 1]); // Center align
+      bytes.addAll([29, 33, 17]); // Double size (width & height)
+      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll(utf8.encode(trimmed + '\n'));
+      // Reset
+      bytes.addAll([29, 33, 0]);
+      bytes.addAll([27, 69, 0]);
+      bytes.addAll([27, 97, 0]);
+    }
+    // Heuristic: Check if the line has 4 or more leading spaces (manually centered in invoiceText)
+    else if (line.startsWith('    ')) {
+      bytes.addAll([27, 97, 1]); // Center align
+      bytes.addAll([29, 33, 0]); // Normal size
+      if (trimmed.startsWith('GSTIN:') || trimmed.startsWith('Table/Type:') || trimmed.startsWith('Table/Parcel:')) {
+        bytes.addAll([27, 69, 1]); // Bold ON
+      } else {
+        bytes.addAll([27, 69, 0]); // Bold OFF
+      }
+      bytes.addAll(utf8.encode(trimmed + '\n'));
+      // Reset
+      bytes.addAll([27, 69, 0]);
+      bytes.addAll([27, 97, 0]); // Left align
+    } 
+    // Check if it starts with GRAND TOTAL
+    else if (trimmed.startsWith("GRAND TOTAL:")) {
+      bytes.addAll([27, 97, 0]); // Left align
+      bytes.addAll([29, 33, 1]); // Double height
+      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll(utf8.encode(line + '\n'));
+      // Reset
+      bytes.addAll([29, 33, 0]);
+      bytes.addAll([27, 69, 0]);
+    }
+    // Standard lines
+    else {
+      bytes.addAll([27, 97, 0]); // Left align
+      bytes.addAll([29, 33, 0]); // Normal size
+      bytes.addAll([27, 69, 0]); // Bold OFF
+      bytes.addAll(utf8.encode(line + '\n'));
+    }
+  }
+  
+  // Print and feed paper (ESC d 4: 27, 100, 4)
+  bytes.addAll([27, 100, 4]);
+  
+  return bytes;
+}
+
 Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
   if (kIsWeb) {
     try {
@@ -9631,9 +9839,9 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
       if (printWindow != null) {
         final doc = printWindow['document'];
         doc.callMethod('write', [
-          '<html><head><title>Print Bill</title><style>body{font-family:monospace;white-space:pre;padding:20px;font-size:14px;color:black;}</style></head><body>' +
+          '<html><head><title>Print Bill</title><style>body{font-family:monospace;white-space:pre;padding:20px;font-size:16px;color:black;display:flex;justify-content:center;}.receipt-container{width:320px;}</style></head><body><div class="receipt-container">' +
           invoiceText.replaceAll('\n', '<br>') +
-          '</body></html>'
+          '</div></body></html>'
         ]);
         doc.callMethod('close');
         printWindow.callMethod('focus');
@@ -9651,18 +9859,10 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
       try {
         final socket = await Socket.connect(state.printerIpAddress, 9100, timeout: const Duration(seconds: 5));
         
-        // Replace Rupee symbol with Rs. for standard character set compatibility
-        String printableText = invoiceText.replaceAll('₹', 'Rs.');
+        // Generate beautiful ESC/POS bytes
+        final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName);
         
-        // ESC/POS Commands:
-        // Initialize printer: ESC @ (27, 64)
-        socket.add([27, 64]);
-        
-        // Print text
-        socket.write(printableText);
-        
-        // Print and feed paper (ESC d 4: 27, 100, 4)
-        socket.add([27, 100, 4]);
+        socket.add(bytes);
         
         // Paper cut command: GS V 66 0 (29, 86, 66, 0)
         socket.add([29, 86, 66, 0]);
@@ -9677,9 +9877,6 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
         return false;
       }
     } else {
-      // Replace Rupee symbol with Rs. for standard character set compatibility
-      String printableText = invoiceText.replaceAll('₹', 'Rs.');
-      
       state.addBtLog('PRINT', 'Print command received. Preparing to send data to Bluetooth printer...', 'APP_SIDE');
       
       // Try printing with auto-reconnect (up to 2 attempts: 1 original + 1 retry after reconnect)
@@ -9711,20 +9908,10 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
             await Future.delayed(const Duration(milliseconds: 300));
           }
 
-          // ESC/POS Commands:
-          // 1. ESC @ (Initialize printer: 27, 64)
-          await PrintBluetoothThermal.writeBytes([27, 64]);
+          // Generate beautiful ESC/POS bytes
+          final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName);
           
-          // 2. Print main text using writeString for robust character encoding and buffer safety
-          final bool result = await PrintBluetoothThermal.writeString(
-            printText: PrintTextSize(
-              size: 1,
-              text: printableText,
-            ),
-          );
-          
-          // 3. Print and feed paper (ESC d 4: 27, 100, 4) to roll paper out for tearing
-          await PrintBluetoothThermal.writeBytes([27, 100, 4]);
+          final bool result = await PrintBluetoothThermal.writeBytes(bytes);
 
           if (result) {
             // Sync state: printing succeeded, so we are definitely connected
@@ -9733,7 +9920,7 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
             return true;
           } else {
             state.addBtLog('PRINT', 'Print data was sent but printer returned failure on attempt $printAttempt. Printer may have disconnected mid-transfer or is out of paper.', 'MACHINE_SIDE');
-            // writeString failed - likely a silent disconnect, retry after reconnect
+            // writeBytes failed - likely a silent disconnect, retry after reconnect
             if (printAttempt < 2) {
               state.isPrinterConnected = false;
               state.addBtLog('PRINT', 'Printer returned failure, will retry after reconnect...', 'MACHINE_SIDE');
@@ -11693,6 +11880,100 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
           ],
         ),
       ],
+    );
+  }
+}
+
+Future<void> printMonospacedReceiptHelper(BuildContext context, AppState state) async {
+  if (state.activeCart.isEmpty) return;
+
+  if (!state.isPrinterReady) {
+    showPrinterErrorDialog(context, state.selectedPrinterType);
+    return;
+  }
+
+  final sub = state.cartSubtotal;
+  final tax = state.cartGst;
+  final del = state.cartDelivery;
+  final tot = state.cartTotal;
+
+  final List<String> lines = [];
+  lines.add("========================================");
+  lines.add("       ${state.storeName}");
+  if (state.storeGstin.isNotEmpty) {
+    lines.add("        GSTIN: ${state.storeGstin}");
+  }
+  lines.add("========================================");
+  final occupiedIso = state.tableOccupiedTimes[state.selectedTableId];
+  String? checkInStr;
+  if (occupiedIso != null) {
+    final occupiedDt = DateTime.tryParse(occupiedIso);
+    if (occupiedDt != null) {
+      final h = occupiedDt.hour.toString().padLeft(2, '0');
+      final m = occupiedDt.minute.toString().padLeft(2, '0');
+      final s = occupiedDt.second.toString().padLeft(2, '0');
+      final ampm = occupiedDt.hour >= 12 ? 'PM' : 'AM';
+      checkInStr = "${occupiedDt.day.toString().padLeft(2, '0')}/${occupiedDt.month.toString().padLeft(2, '0')}/${occupiedDt.year}, $h:$m:$s $ampm";
+    }
+  }
+
+  final now = DateTime.now();
+  final hStr = now.hour.toString().padLeft(2, '0');
+  final mStr = now.minute.toString().padLeft(2, '0');
+  final sStr = now.second.toString().padLeft(2, '0');
+  final ampm = now.hour >= 12 ? 'PM' : 'AM';
+  final nowStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, $hStr:$mStr:$sStr $ampm";
+
+  lines.add("Table/Parcel: ${state.selectedTableId ?? ''}");
+  if (checkInStr != null) {
+    lines.add("Check-In:  $checkInStr");
+    lines.add("Check-Out: $nowStr");
+  } else {
+    lines.add("Date: $nowStr");
+  }
+  lines.add("========================================");
+  lines.add("ITEMS:");
+  
+  for (var item in state.activeCart) {
+    final nameStr = item.name.padRight(24, '.');
+    final qtyStr = "${item.qty}x".padRight(6, ' ');
+    final valStr = "Rs.${item.price * item.qty}".padLeft(10, ' ');
+    lines.add("$nameStr$qtyStr$valStr");
+  }
+  
+  lines.add("========================================");
+  final rawItemTotal = state.activeCart.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+  final discountPercent = state.cartDiscountPercent;
+  final discountAmount = (rawItemTotal * discountPercent / 100).round();
+  if (discountPercent > 0) {
+    final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
+    final labelPadded = label.padRight(19, ' ');
+    lines.add("Items Total:       ${"Rs.$rawItemTotal".padLeft(21, ' ')}");
+    lines.add("$labelPadded${"-Rs.$discountAmount".padLeft(21, ' ')}");
+  }
+  lines.add("Subtotal:          ${"Rs.$sub".padLeft(21, ' ')}");
+  if (state.showGstOnBills && tax > 0) {
+    lines.add("CGST:              ${"Rs.${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+    lines.add("SGST:              ${"Rs.${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
+  }
+  lines.add("Packaging:         ${"Rs.$del".padLeft(21, ' ')}");
+  if (state.showGstOnBills && tax > 0) {
+    lines.add("Tax Mode:          ${(state.isGstInclusive ? "Inclusive" : "Exclusive").padLeft(21, ' ')}");
+  }
+  lines.add("========================================");
+  lines.add("GRAND TOTAL:       ${"Rs.$tot".padLeft(21, ' ')}");
+  lines.add("========================================");
+  lines.add("      Thank You! Please Visit Again");
+  lines.add("========================================");
+
+  final success = await executeReceiptPrint(lines.join('\n'), state);
+  if (!success) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Failed to print receipt.')),
+    );
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Receipt printed successfully!')),
     );
   }
 }

@@ -13,6 +13,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'app_state.dart';
 import 'storage_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 // TODO: Put your actual Firebase credentials here to enable Web Firestore sync
 const FirebaseOptions firebaseOptions = FirebaseOptions(
@@ -2814,6 +2818,7 @@ class CartBottomActionBar extends StatelessWidget {
                       state.storeName,
                       state.selectedTableId ?? 'WALK-IN',
                       toPrint,
+                      state.rollWidth,
                     );
                     
                     state.markKOTPrinted();
@@ -3103,6 +3108,7 @@ class CartDrawer extends StatelessWidget {
                           state.storeName,
                           state.selectedTableId ?? 'WALK-IN',
                           toPrint,
+                          state.rollWidth,
                         );
                         
                         state.markKOTPrinted();
@@ -3303,14 +3309,17 @@ class CartDrawer extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: isTotal ? Colors.white : (isDiscount ? const Color(0xFF00AA4F) : const Color(0xFF94A3B8)),
-            fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-            fontSize: isTotal ? 16 : 13.5,
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isTotal ? Colors.white : (isDiscount ? const Color(0xFF00AA4F) : const Color(0xFF94A3B8)),
+              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+              fontSize: isTotal ? 16 : 13.5,
+            ),
           ),
         ),
+        const SizedBox(width: 8),
         Text(
           value,
           style: TextStyle(
@@ -3335,54 +3344,19 @@ class ReceiptPopupOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
 
-    final List<String> lines = [];
-    lines.add("========================================");
-    lines.add("       ${state.storeName}");
-    if (state.storeGstin.isNotEmpty) {
-      lines.add("        GSTIN: ${state.storeGstin}");
-    }
-    lines.add("========================================");
-    lines.add("Invoice: ${invoice.id}");
-    lines.add("Table: ${invoice.tableId}");
-    if (invoice.checkInTime != null) {
-      lines.add("Check-In:  ${invoice.checkInTime}");
-      lines.add("Check-Out: ${invoice.dateTime}");
-    } else {
-      lines.add("Date: ${invoice.dateTime}");
-    }
-    lines.add("========================================");
-    lines.add("ITEMS:");
-    
-    for (var item in invoice.items) {
-      final nameStr = item.name.padRight(24, '.');
-      final qtyStr = "${item.qty}x".padRight(6, ' ');
-      final valStr = "Rs.${item.price * item.qty}".padLeft(10, ' ');
-      lines.add("$nameStr$qtyStr$valStr");
-    }
-    
-    lines.add("========================================");
-    final rawItemTotal = invoice.items.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
-    final discountPercent = invoice.discountPercent;
-    final discountAmount = (rawItemTotal * discountPercent / 100).round();
-    if (discountPercent > 0) {
-      final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
-      final labelPadded = label.padRight(19, ' ');
-      lines.add("Items Total:       ${"Rs.$rawItemTotal".padLeft(21, ' ')}");
-      lines.add("$labelPadded${"-Rs.$discountAmount".padLeft(21, ' ')}");
-    }
-    lines.add("Subtotal:          ${"Rs.${invoice.subtotal}".padLeft(21, ' ')}");
-    if (invoice.gst > 0) {
-      lines.add("CGST:              ${"Rs.${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-      lines.add("SGST:              ${"Rs.${(invoice.gst / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-    }
-    lines.add("Packaging:         ${"Rs.${invoice.packaging}".padLeft(21, ' ')}");
-    lines.add("========================================");
-    lines.add("GRAND TOTAL:       ${"Rs.${invoice.total}".padLeft(21, ' ')}");
-    lines.add("========================================");
-    lines.add("      Thank You! Please Visit Again");
-    lines.add("========================================");
-
-    final receiptText = lines.join('\n');
+    final receiptText = formatReceiptText(
+      state: state,
+      tableId: invoice.tableId,
+      checkInTime: invoice.checkInTime,
+      checkoutTime: invoice.dateTime,
+      items: invoice.items,
+      subtotal: invoice.subtotal,
+      gst: invoice.gst,
+      packaging: invoice.packaging,
+      total: invoice.total,
+      discountPercent: invoice.discountPercent,
+      invoiceId: invoice.id,
+    );
 
     return GestureDetector(
       onTap: () => state.selectedReceiptInvoice = null,
@@ -3406,9 +3380,26 @@ class ReceiptPopupOverlay extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Invoice Bill Receipt', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => state.selectedReceiptInvoice = null,
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.share, color: Color(0xFFFF6F24), size: 20),
+                            onPressed: () async {
+                              try {
+                                await generateAndShareSingleInvoicePdf(invoice, state.storeName);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to generate PDF: $e')),
+                                );
+                              }
+                            },
+                            tooltip: 'Share PDF Receipt',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => state.selectedReceiptInvoice = null,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -3466,6 +3457,7 @@ class ReceiptPopupOverlay extends StatelessWidget {
                                 state.storeName,
                                 invoice.tableId,
                                 invoice.items,
+                                state.rollWidth,
                               );
                               final success = await executeReceiptPrint(kotText, state);
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -4117,6 +4109,35 @@ class _MenuReportViewState extends State<MenuReportView> {
             ? IconButton(icon: const Icon(Icons.menu), onPressed: () => widget.scaffoldKey.currentState?.openDrawer())
             : null,
         title: const Text('Menu Item Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        actions: [
+          if (state.menu.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  try {
+                    await generateAndShareItemSalesPdf(
+                      state.menu,
+                      performanceCounts,
+                      state.storeName,
+                      _getDateRangeDescription(),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to generate PDF: $e')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.share, size: 16, color: Colors.white),
+                label: const Text('Share PDF', style: TextStyle(fontSize: 13, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6F24),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -4255,78 +4276,766 @@ class _MenuReportViewState extends State<MenuReportView> {
   }
 }
 
+// --- PDF REPORT EXPORT HELPERS ---
+
+Future<void> generateAndShareSingleInvoicePdf(InvoiceModel invoice, String storeName) async {
+  final pdf = pw.Document();
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.roll57, // Receipt roll width format
+      margin: const pw.EdgeInsets.all(8),
+      build: (context) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Center(
+            child: pw.Column(
+              children: [
+                pw.Text(storeName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 2),
+                pw.Text('RECEIPT / BILL', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Divider(thickness: .5, color: PdfColors.grey500),
+          pw.SizedBox(height: 4),
+          pw.Text('Bill No: ${invoice.id}', style: const pw.TextStyle(fontSize: 7.5)),
+          pw.Text('Date: ${invoice.dateTime}', style: const pw.TextStyle(fontSize: 7.5)),
+          pw.Text('Table/Parcel: ${invoice.tableId}', style: const pw.TextStyle(fontSize: 7.5)),
+          if (invoice.checkInTime != null)
+            pw.Text('Check-In: ${invoice.checkInTime}', style: const pw.TextStyle(fontSize: 7.5)),
+          pw.SizedBox(height: 4),
+          pw.Divider(thickness: .5, color: PdfColors.grey500),
+          pw.SizedBox(height: 4),
+          pw.Text('ITEMS:', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 2),
+          pw.Column(
+            children: invoice.items.map((item) {
+              return pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Expanded(
+                    child: pw.Text('${item.name} (${item.qty}x)', style: const pw.TextStyle(fontSize: 7.5)),
+                  ),
+                  pw.Text('Rs.${item.price * item.qty}', style: const pw.TextStyle(fontSize: 7.5)),
+                ],
+              );
+            }).toList(),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Divider(thickness: .5, color: PdfColors.grey500),
+          pw.SizedBox(height: 4),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Subtotal:', style: const pw.TextStyle(fontSize: 7.5)),
+              pw.Text('Rs.${invoice.subtotal}', style: const pw.TextStyle(fontSize: 7.5)),
+            ],
+          ),
+          if (invoice.gst > 0) ...[
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('CGST (2.5%):', style: const pw.TextStyle(fontSize: 7.5)),
+                pw.Text('Rs.${(invoice.gst / 2.0).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7.5)),
+              ],
+            ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('SGST (2.5%):', style: const pw.TextStyle(fontSize: 7.5)),
+                pw.Text('Rs.${(invoice.gst / 2.0).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7.5)),
+              ],
+            ),
+          ],
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Packaging:', style: const pw.TextStyle(fontSize: 7.5)),
+              pw.Text('Rs.${invoice.packaging}', style: const pw.TextStyle(fontSize: 7.5)),
+            ],
+          ),
+          pw.SizedBox(height: 2),
+          pw.Divider(thickness: .5, color: PdfColors.grey500),
+          pw.SizedBox(height: 2),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('GRAND TOTAL:', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Rs.${invoice.total}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+          pw.Center(
+            child: pw.Text('Thank You! Please Visit Again', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  final output = await getTemporaryDirectory();
+  final file = File('${output.path}/bill_${invoice.id.length > 8 ? invoice.id.substring(invoice.id.length - 8) : invoice.id}.pdf');
+  await file.writeAsBytes(await pdf.save());
+
+  await Share.shareXFiles([XFile(file.path)], text: 'Bill Receipt from $storeName');
+}
+
+Future<void> generateAndShareItemSalesPdf(
+  List<dynamic> menu,
+  Map<int, int> performanceCounts,
+  String storeName,
+  String dateRangeStr,
+) async {
+  final pdf = pw.Document();
+
+  // Sort items by revenue descending
+  final sortedMenu = List<dynamic>.from(menu);
+  sortedMenu.sort((a, b) {
+    final qtyA = performanceCounts[a.id] ?? 0;
+    final qtyB = performanceCounts[b.id] ?? 0;
+    final revA = qtyA * a.price;
+    final revB = qtyB * b.price;
+    return revB.compareTo(revA);
+  });
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (context) => [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(storeName, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Text('Item-wise Sales Performance Report', style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+              ],
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text('ITEM REPORT', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo700)),
+                pw.Text('Period: $dateRangeStr', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+              ],
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 15),
+        pw.Divider(thickness: 1, color: PdfColors.grey400),
+        pw.SizedBox(height: 15),
+        
+        // Summary info
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _pdfSummaryCard('Total Items Sold', '${performanceCounts.values.fold(0, (sum, val) => sum + val)} Units'),
+            _pdfSummaryCard('Total Revenue', 'Rs.${sortedMenu.fold<double>(0.0, (sum, item) => sum + ((performanceCounts[item.id] ?? 0) * item.price)).round()}'),
+          ],
+        ),
+        
+        pw.SizedBox(height: 25),
+        pw.Text('Item Performance Details (Sorted by Revenue)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 10),
+        
+        // Table
+        pw.TableHelper.fromTextArray(
+          headers: ['Item Name', 'Category', 'Price', 'Qty Sold', 'Revenue'],
+          data: sortedMenu.map((item) {
+            final qty = performanceCounts[item.id] ?? 0;
+            final rev = qty * item.price;
+            return [
+              item.name,
+              item.category,
+              'Rs.${item.price}',
+              qty.toString(),
+              'Rs.$rev',
+            ];
+          }).toList(),
+          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo900),
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: .5))),
+          cellAlignment: pw.Alignment.centerLeft,
+          cellAlignments: {
+            2: pw.Alignment.centerRight,
+            3: pw.Alignment.center,
+            4: pw.Alignment.centerRight,
+          },
+        ),
+        
+        pw.SizedBox(height: 20),
+        pw.Divider(thickness: 1, color: PdfColors.grey400),
+        pw.SizedBox(height: 10),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Generated automatically by Ahar OS', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text(
+              'Gross Item Revenue: Rs.${sortedMenu.fold<double>(0.0, (sum, item) => sum + ((performanceCounts[item.id] ?? 0) * item.price)).round()}', 
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  final output = await getTemporaryDirectory();
+  final file = File('${output.path}/item_sales_report_${DateTime.now().millisecondsSinceEpoch}.pdf');
+  await file.writeAsBytes(await pdf.save());
+
+  await Share.shareXFiles([XFile(file.path)], text: 'Item Sales Statement for $storeName');
+}
+
+Future<void> generateAndShareSalesPdf(List<InvoiceModel> invoices, String storeName, String dateRangeStr) async {
+  final pdf = pw.Document();
+
+  // Sort invoices chronologically (oldest first for a ledger statement)
+  final sorted = List<InvoiceModel>.from(invoices);
+  sorted.sort((a, b) => a.parsedDateTime.compareTo(b.parsedDateTime));
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (context) => [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(storeName, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Text('Restaurant Ledger & Sales Statement', style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+              ],
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text('STATEMENT', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.orange700)),
+                pw.Text('Period: $dateRangeStr', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+              ],
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 15),
+        pw.Divider(thickness: 1, color: PdfColors.grey400),
+        pw.SizedBox(height: 15),
+        
+        // Summary Cards
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _pdfSummaryCard('Total Sales', 'Rs.${invoices.fold(0, (sum, inv) => sum + inv.total)}'),
+            _pdfSummaryCard('Total Bills', '${invoices.length}'),
+            _pdfSummaryCard('CGST/SGST', 'Rs.${invoices.fold(0, (sum, inv) => sum + inv.gst)}'),
+            _pdfSummaryCard('Packaging', 'Rs.${invoices.fold(0, (sum, inv) => sum + inv.packaging)}'),
+          ],
+        ),
+        
+        pw.SizedBox(height: 25),
+        pw.Text('Transaction Log', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 10),
+        
+        // Table
+        pw.TableHelper.fromTextArray(
+          headers: ['Date & Time', 'Bill No.', 'Table', 'Items', 'Subtotal', 'GST', 'Pkg', 'Total'],
+          data: sorted.map((inv) {
+            final date = inv.parsedDateTime;
+            final dateStr = "${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}";
+            final itemCount = inv.items.fold<int>(0, (sum, item) => sum + item.qty);
+            final shortId = inv.id.length > 8 ? inv.id.substring(inv.id.length - 8) : inv.id;
+            return [
+              dateStr,
+              shortId,
+              inv.tableId,
+              itemCount.toString(),
+              'Rs.${inv.subtotal}',
+              'Rs.${inv.gst}',
+              'Rs.${inv.packaging}',
+              'Rs.${inv.total}',
+            ];
+          }).toList(),
+          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: .5))),
+          cellAlignment: pw.Alignment.centerLeft,
+          cellAlignments: {
+            4: pw.Alignment.centerRight,
+            5: pw.Alignment.centerRight,
+            6: pw.Alignment.centerRight,
+            7: pw.Alignment.centerRight,
+          },
+        ),
+        
+        pw.SizedBox(height: 20),
+        pw.Divider(thickness: 1, color: PdfColors.grey400),
+        pw.SizedBox(height: 10),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Generated automatically by Ahar OS', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text(
+              'Gross Revenue: Rs.${invoices.fold(0, (sum, inv) => sum + inv.total)}', 
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.orange800)
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  final output = await getTemporaryDirectory();
+  final file = File('${output.path}/sales_statement_${DateTime.now().millisecondsSinceEpoch}.pdf');
+  await file.writeAsBytes(await pdf.save());
+
+  await Share.shareXFiles([XFile(file.path)], text: 'Sales Ledger Statement for $storeName');
+}
+
+pw.Widget _pdfSummaryCard(String title, String val) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    decoration: pw.BoxDecoration(
+      color: PdfColors.grey100,
+      borderRadius: pw.BorderRadius.circular(6),
+      border: pw.Border.all(color: PdfColors.grey300, width: 1),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(title, style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+        pw.SizedBox(height: 4),
+        pw.Text(val, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+      ],
+    ),
+  );
+}
+
 // --- VIEW: ACCOUNTS LEDGER VIEW ---
 
-class AccountsReportView extends StatelessWidget {
+class AccountsReportView extends StatefulWidget {
   final GlobalKey<ScaffoldState> scaffoldKey;
 
   const AccountsReportView({super.key, required this.scaffoldKey});
 
   @override
+  State<AccountsReportView> createState() => _AccountsReportViewState();
+}
+
+class _AccountsReportViewState extends State<AccountsReportView> {
+  String selectedPeriod = 'today'; // 'today', 'weekly', 'monthly', 'custom'
+  DateTimeRange? customRange;
+
+  List<InvoiceModel> getFilteredInvoices(List<InvoiceModel> invoices) {
+    final now = DateTime.now();
+    if (selectedPeriod == 'today') {
+      final start = DateTime(now.year, now.month, now.day);
+      return invoices.where((inv) {
+        final date = inv.parsedDateTime;
+        return date.isAfter(start.subtract(const Duration(microseconds: 1)));
+      }).toList();
+    } else if (selectedPeriod == 'weekly') {
+      final start = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
+      return invoices.where((inv) {
+        final date = inv.parsedDateTime;
+        return date.isAfter(start.subtract(const Duration(microseconds: 1)));
+      }).toList();
+    } else if (selectedPeriod == 'monthly') {
+      final start = DateTime(now.year, now.month, 1);
+      return invoices.where((inv) {
+        final date = inv.parsedDateTime;
+        return date.isAfter(start.subtract(const Duration(microseconds: 1)));
+      }).toList();
+    } else if (selectedPeriod == 'custom' && customRange != null) {
+      final start = DateTime(customRange!.start.year, customRange!.start.month, customRange!.start.day);
+      final end = DateTime(customRange!.end.year, customRange!.end.month, customRange!.end.day, 23, 59, 59, 999);
+      return invoices.where((inv) {
+        final date = inv.parsedDateTime;
+        return date.isAfter(start.subtract(const Duration(microseconds: 1))) && date.isBefore(end.add(const Duration(microseconds: 1)));
+      }).toList();
+    }
+    return invoices;
+  }
+
+  String getDateRangeString() {
+    final now = DateTime.now();
+    if (selectedPeriod == 'today') {
+      return "Today (${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year})";
+    } else if (selectedPeriod == 'weekly') {
+      final start = now.subtract(const Duration(days: 7));
+      return "Last 7 Days (${start.day}/${start.month} - ${now.day}/${now.month})";
+    } else if (selectedPeriod == 'monthly') {
+      return "This Month (01/${now.month}/${now.year} - ${now.day}/${now.month}/${now.year})";
+    } else if (selectedPeriod == 'custom' && customRange != null) {
+      final start = customRange!.start;
+      final end = customRange!.end;
+      return "Custom Range (${start.day}/${start.month}/${start.year} - ${end.day}/${end.month}/${end.year})";
+    }
+    return "All Time";
+  }
+
+  Future<void> _executePrint(bool includeLog, AppState state, List<InvoiceModel> filtered, int totalInvoices, int gross, int gstSum, int delSum) async {
+    try {
+      final text = formatSalesReportText(
+        state: state,
+        dateRangeStr: getDateRangeString(),
+        totalBills: totalInvoices,
+        totalGross: gross,
+        totalGst: gstSum,
+        totalPackaging: delSum,
+        includeTransactionLog: includeLog,
+        invoices: filtered,
+      );
+      final success = await executeReceiptPrint(text, state);
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to print report.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print error: $e')));
+      }
+    }
+  }
+
+  Future<void> _selectCustomRange(BuildContext context) async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: customRange ?? DateTimeRange(
+        start: DateTime.now().subtract(const Duration(days: 7)),
+        end: DateTime.now(),
+      ),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFFF6F24),
+              onPrimary: Colors.white,
+              surface: Color(0xFF12161B),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        customRange = picked;
+        selectedPeriod = 'custom';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
-    final gross = state.invoices.fold(0, (sum, inv) => sum + inv.total);
-    final gstSum = state.invoices.fold(0, (sum, inv) => sum + inv.gst);
-    final delSum = state.invoices.fold(0, (sum, inv) => sum + inv.packaging);
+    final filtered = getFilteredInvoices(state.invoices);
+    
+    final gross = filtered.fold(0, (sum, inv) => sum + inv.total);
+    final gstSum = filtered.fold(0, (sum, inv) => sum + inv.gst);
+    final delSum = filtered.fold(0, (sum, inv) => sum + inv.packaging);
+    final totalInvoices = filtered.length;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF12161B),
         leading: MediaQuery.of(context).size.width <= 1100
-            ? IconButton(icon: const Icon(Icons.menu), onPressed: () => scaffoldKey.currentState?.openDrawer())
+            ? IconButton(icon: const Icon(Icons.menu), onPressed: () => widget.scaffoldKey.currentState?.openDrawer())
             : null,
-        title: const Text('Accounts Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text('Accounts & Sales Ledger', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        actions: [
+          if (filtered.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'pdf') {
+                    try {
+                      await generateAndShareSalesPdf(filtered, state.storeName, getDateRangeString());
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to generate PDF: $e')));
+                    }
+                  } else if (value == 'print') {
+                    if (!state.isPrinterReady) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Printer not connected!')));
+                      return;
+                    }
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          backgroundColor: const Color(0xFF191E28),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Print Options', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.summarize, color: Color(0xFFFF6F24)),
+                                title: const Text('Summary Only', style: TextStyle(color: Colors.white)),
+                                subtitle: const Text('Total sales, GST, and bills count', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                onTap: () async {
+                                  Navigator.pop(dialogContext);
+                                  _executePrint(false, state, filtered, totalInvoices, gross, gstSum, delSum);
+                                },
+                              ),
+                              const Divider(color: Colors.white12),
+                              ListTile(
+                                leading: const Icon(Icons.list_alt, color: Color(0xFFFF6F24)),
+                                title: const Text('Detailed List', style: TextStyle(color: Colors.white)),
+                                subtitle: const Text('Includes summary + transaction log of all bills', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                onTap: () async {
+                                  Navigator.pop(dialogContext);
+                                  _executePrint(true, state, filtered, totalInvoices, gross, gstSum, delSum);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6F24),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.ios_share, size: 16, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text('Export', style: TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'pdf',
+                    child: Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf, color: Colors.white70, size: 20),
+                        SizedBox(width: 12),
+                        Text('Share PDF', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'print',
+                    child: Row(
+                      children: [
+                        Icon(Icons.print, color: Colors.white70, size: 20),
+                        SizedBox(width: 12),
+                        Text('Print Thermal', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ],
+                color: const Color(0xFF2D3748),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+        ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 600),
-            padding: const EdgeInsets.all(24),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
+      body: Column(
+        children: [
+          // Filter Tabs Bar
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: const Color(0xFF12161B),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildFilterTab('today', 'Today'),
+                _buildFilterTab('weekly', 'Last 7D'),
+                _buildFilterTab('monthly', 'This Month'),
+                ElevatedButton.icon(
+                  onPressed: () => _selectCustomRange(context),
+                  icon: const Icon(Icons.calendar_month, size: 14, color: Colors.white70),
+                  label: Text(
+                    selectedPeriod == 'custom' ? 'Custom Selected' : 'Custom Pick',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: selectedPeriod == 'custom' ? const Color(0xFFFF6F24).withOpacity(0.3) : const Color(0xFF191E28),
+                    elevation: 0,
+                    side: BorderSide(color: selectedPeriod == 'custom' ? const Color(0xFFFF6F24) : Colors.white10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Financial Accounts Statement', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 24),
-                  _buildStatementRow('Cash Desk Ledger', '₹$gross', color: const Color(0xFF00AA4F)),
-                  _buildStatementRow('Outstanding Receivables', '₹0', color: const Color(0xFFF59E0B)),
-                  _buildStatementRow('Tax Liability (GST Account)', '₹$gstSum'),
-                  _buildStatementRow('Direct Expense (Delivery Outflow)', '₹$delSum', color: const Color(0xFFFF4444)),
+                  Text(
+                    'Ledger Period: ${getDateRangeString()}',
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Summary cards grid
+                  GridView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: MediaQuery.of(context).size.width > 700 ? 4 : 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.8,
+                    ),
+                    children: [
+                      _buildSummaryCard('Gross Sales', '₹$gross', const Color(0xFF00AA4F)),
+                      _buildSummaryCard('Total Invoices', '$totalInvoices', const Color(0xFF06B6D4)),
+                      _buildSummaryCard('Tax Collected', '₹$gstSum', const Color(0xFF8B5CF6)),
+                      _buildSummaryCard('Packaging/Del', '₹$delSum', const Color(0xFFFF6F24)),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 28),
+                  
+                  // passbook ledger table container
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0x7F191E28),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0x0CFFFFFF)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Statement / Passbook Ledger',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildStatementTable(filtered),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterTab(String key, String label) {
+    final isSelected = selectedPeriod == key;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          selectedPeriod = key;
+        });
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF6F24) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF94A3B8),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildStatementRow(String label, String value, {Color? color}) {
+  Widget _buildSummaryCard(String label, String value, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0x0CFFFFFF)))),
-      child: Row(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0x7F191E28),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0x0CFFFFFF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 13.5, color: Color(0xFF94A3B8)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.bold,
-              color: color ?? Colors.white,
-            ),
-          ),
+          Text(label, style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
+          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatementTable(List<InvoiceModel> filteredInvoices) {
+    if (filteredInvoices.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Text('No transactions found in this period.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5)),
+        ),
+      );
+    }
+    
+    final sorted = List<InvoiceModel>.from(filteredInvoices);
+    sorted.sort((a, b) => b.parsedDateTime.compareTo(a.parsedDateTime));
+    
+    return Container(
+      width: double.infinity,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 24,
+          headingRowHeight: 40,
+          horizontalMargin: 8,
+          headingRowColor: MaterialStateProperty.all(const Color(0xFF191E28).withOpacity(0.6)),
+          columns: const [
+            DataColumn(label: Text('Date & Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('Bill No.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('Table', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('Subtotal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('GST', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('Packaging', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+            DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70))),
+          ],
+          rows: sorted.map((inv) {
+            final date = inv.parsedDateTime;
+            final dateStr = "${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}";
+            final itemCount = inv.items.fold<int>(0, (sum, item) => sum + item.qty);
+            final shortId = inv.id.length > 8 ? inv.id.substring(inv.id.length - 8) : inv.id;
+            return DataRow(
+              cells: [
+                DataCell(Text(dateStr, style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                DataCell(Text(shortId, style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.white70))),
+                DataCell(Text(inv.tableId, style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                DataCell(Text(itemCount.toString(), style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                DataCell(Text('₹${inv.subtotal}', style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                DataCell(Text('₹${inv.gst}', style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                DataCell(Text('₹${inv.packaging}', style: const TextStyle(fontSize: 12, color: Colors.white70))),
+                DataCell(Text('₹${inv.total}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981)))),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -6751,23 +7460,25 @@ class _DevicePlaceholderViewState extends State<DevicePlaceholderView> {
   }
 
   void _printTestPage(BuildContext context, AppState state) async {
+    final int width = state.rollWidth == 3 ? 48 : 32;
+    final String divider = "=" * width;
     final List<String> lines = [];
-    lines.add("========================================");
+    lines.add(divider);
     lines.add("       ${state.storeName}");
     if (state.selectedPrinterType == 'wifi') {
       lines.add("        TEST WI-FI PRINT");
-      lines.add("========================================");
+      lines.add(divider);
       lines.add("Printer IP: ${state.printerIpAddress}");
     } else {
       lines.add("        TEST BLUETOOTH PRINT");
-      lines.add("========================================");
+      lines.add(divider);
       lines.add("Printer: ${state.connectedPrinterName.isEmpty ? 'BlueTooth Printer' : state.connectedPrinterName}");
       lines.add("MAC: ${state.connectedPrinterMac}");
     }
     lines.add("Date: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}");
-    lines.add("========================================");
+    lines.add(divider);
     lines.add("Status: WORKING");
-    lines.add("========================================");
+    lines.add(divider);
     final success = await executeReceiptPrint(lines.join('\n'), state);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(success ? 'Test page printed!' : 'Failed to print test page.')),
@@ -8116,12 +8827,18 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                           DropdownButton<int>(
                             value: state.cloudInvoicesLimit,
                             dropdownColor: const Color(0xFF12161B),
-                            items: [3, 5, 10, 50, 100, 500, 1000].map((int val) {
-                              return DropdownMenuItem<int>(
-                                value: val,
-                                child: Text('$val Invoices'),
-                              );
-                            }).toList(),
+                            items: () {
+                              final List<int> vals = [3, 5, 10, 50, 100, 500, 1000];
+                              if (!vals.contains(state.cloudInvoicesLimit)) {
+                                vals.add(state.cloudInvoicesLimit);
+                              }
+                              return vals.map((int val) {
+                                return DropdownMenuItem<int>(
+                                  value: val,
+                                  child: Text(val >= 999999 ? 'Unlimited' : '$val Invoices'),
+                                );
+                              }).toList();
+                            }(),
                             onChanged: (newVal) {
                               if (newVal != null) {
                                 state.updateCloudInvoicesLimit(newVal);
@@ -8135,11 +8852,11 @@ class _AdvancePlaceholderViewState extends State<AdvancePlaceholderView> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Usage: ${state.invoices.length} / ${state.cloudInvoicesLimit} Invoices',
+                            'Usage: ${state.invoices.length} / ${state.cloudInvoicesLimit >= 999999 ? "Unlimited" : state.cloudInvoicesLimit} Invoices',
                             style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                           ),
                           Text(
-                            '${state.cloudUsagePercentage.toStringAsFixed(1)}%',
+                            state.cloudInvoicesLimit >= 999999 ? '0.0%' : '${state.cloudUsagePercentage.toStringAsFixed(1)}%',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
@@ -9097,10 +9814,8 @@ class _CashierLockOverlayState extends State<CashierLockOverlay> {
       if (canAuthenticate) {
         final bool didAuthenticate = await auth.authenticate(
           localizedReason: 'Scan fingerprint to unlock Ahar OS terminal',
-          options: const AuthenticationOptions(
-            stickyAuth: true,
-            biometricOnly: true,
-          ),
+          persistAcrossBackgrounding: true,
+          biometricOnly: true,
         );
 
         if (didAuthenticate) {
@@ -9724,32 +10439,45 @@ void showPrinterErrorDialog(BuildContext context, String printerType) {
   );
 }
 
-String formatKOTText(String storeName, String tableId, List<dynamic> items) {
+String formatKOTText(String storeName, String tableId, List<dynamic> items, int rollWidth) {
+  final int width = rollWidth == 3 ? 48 : 32;
   final List<String> lines = [];
-  lines.add("========================================");
-  lines.add("             KITCHEN ORDER              ");
-  lines.add("                 (KOT)                  ");
-  lines.add("========================================");
+  final String divider = "=" * width;
+  
+  lines.add(divider);
+  lines.add("      KITCHEN ORDER (KOT)"); 
+  lines.add(divider);
   lines.add("Store: $storeName");
   lines.add("Table/Type: $tableId");
   final now = DateTime.now();
   final dateStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
   lines.add("Date: $dateStr");
-  lines.add("========================================");
-  lines.add("QTY   ITEMS");
-  lines.add("----------------------------------------");
+  lines.add(divider);
+  
+  final int qtyWidth = width == 48 ? 6 : 5;
+  final int itemWidth = width - qtyWidth;
+  
+  lines.add("QTY".padRight(qtyWidth, ' ') + "ITEMS".padRight(itemWidth, ' '));
+  lines.add("-" * width);
   for (var item in items) {
-    lines.add("${item.qty.toString().padRight(5, ' ')} ${item.name}");
+    final nameLines = wrapReceiptText(item.name, itemWidth);
+    lines.add("${item.qty}x".padRight(qtyWidth, ' ') + nameLines[0].padRight(itemWidth, ' '));
+    for (int i = 1; i < nameLines.length; i++) {
+      lines.add("".padRight(qtyWidth, ' ') + nameLines[i].padRight(itemWidth, ' '));
+    }
   }
-  lines.add("========================================");
+  lines.add(divider);
   return lines.join('\n');
 }
 
-List<int> getEscPosBytesForReceipt(String invoiceText, String storeName) {
+List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rollWidth) {
   final List<int> bytes = [];
   
   // ESC @ (Initialize printer)
   bytes.addAll([27, 64]);
+  
+  // ESC M 0 (Select Font A - larger default font instead of tiny Font B)
+  bytes.addAll([27, 77, 0]);
   
   // Replace Rupee symbol with Rs. just in case there are any stray ₹ characters
   String printableText = invoiceText.replaceAll('₹', 'Rs.');
@@ -9783,7 +10511,7 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName) {
       bytes.addAll([27, 97, 0]); // Left align
     } 
     // Check if line is a KOT header
-    else if (trimmed == "KITCHEN ORDER" || trimmed == "(KOT)") {
+    else if (trimmed == "KITCHEN ORDER" || trimmed == "(KOT)" || trimmed == "KITCHEN ORDER (KOT)") {
       bytes.addAll([27, 97, 1]); // Center align
       bytes.addAll([29, 33, 17]); // Double size (width & height)
       bytes.addAll([27, 69, 1]); // Bold ON
@@ -9792,6 +10520,17 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName) {
       bytes.addAll([29, 33, 0]);
       bytes.addAll([27, 69, 0]);
       bytes.addAll([27, 97, 0]);
+    }
+    // Check if it contains Thank You!
+    else if (trimmed.contains("Thank You!")) {
+      bytes.addAll([27, 97, 1]); // Center align
+      bytes.addAll([29, 33, 1]); // Double height (medium size)
+      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll(utf8.encode(trimmed + '\n'));
+      // Reset
+      bytes.addAll([29, 33, 0]);
+      bytes.addAll([27, 69, 0]);
+      bytes.addAll([27, 97, 0]); // Left align
     }
     // Heuristic: Check if the line has 4 or more leading spaces (manually centered in invoiceText)
     else if (line.startsWith('    ')) {
@@ -9832,6 +10571,287 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName) {
   return bytes;
 }
 
+List<String> wrapReceiptText(String text, int maxLength) {
+  if (text.length <= maxLength) return [text];
+  
+  final List<String> lines = [];
+  final List<String> words = text.split(' ');
+  String currentLine = "";
+  
+  for (var word in words) {
+    if (currentLine.isEmpty) {
+      currentLine = word;
+    } else if ((currentLine + " " + word).length <= maxLength) {
+      currentLine += " " + word;
+    } else {
+      if (word.length > maxLength) {
+        if (currentLine.isNotEmpty) {
+          lines.add(currentLine);
+          currentLine = "";
+        }
+        int start = 0;
+        while (start < word.length) {
+          int end = start + maxLength;
+          if (end > word.length) end = word.length;
+          lines.add(word.substring(start, end));
+          start = end;
+        }
+      } else {
+        lines.add(currentLine);
+        currentLine = word;
+      }
+    }
+  }
+  if (currentLine.isNotEmpty) {
+    lines.add(currentLine);
+  }
+  return lines;
+}
+
+String formatReceiptText({
+  required AppState state,
+  required String? tableId,
+  required String? checkInTime,
+  required String checkoutTime,
+  required List<CartItem> items,
+  required int subtotal,
+  required int gst,
+  required int packaging,
+  required int total,
+  required double discountPercent,
+  String? invoiceId,
+}) {
+  final int width = state.rollWidth == 3 ? 48 : 32;
+  final List<String> lines = [];
+  
+  final String divider = "=" * width;
+  
+  lines.add(divider);
+  lines.add("       ${state.storeName}");
+  if (state.storeGstin.isNotEmpty) {
+    lines.add("        GSTIN: ${state.storeGstin}");
+  }
+  lines.add(divider);
+
+  if (invoiceId != null) {
+    lines.add("Invoice: $invoiceId");
+  }
+  lines.add("Table/Parcel: ${tableId ?? ''}");
+  if (checkInTime != null) {
+    lines.add("Check-In:  $checkInTime");
+    lines.add("Check-Out: $checkoutTime");
+  } else {
+    lines.add("Date: $checkoutTime");
+  }
+  lines.add(divider);
+  lines.add("ITEMS:");
+  
+  final int nameWidth = width == 48 ? 27 : 14;
+  final int qtyWidth = width == 48 ? 6 : 5;
+  final int valWidth = width == 48 ? 13 : 11;
+  
+  for (var item in items) {
+    final nameLines = wrapReceiptText(item.name, nameWidth);
+    
+    // First line has the first part of name, qty, and price
+    final firstLineName = nameLines[0].padRight(nameWidth, '.');
+    final qtyStr = "${item.qty}x".padRight(qtyWidth, ' ');
+    final valStr = "Rs.${item.price * item.qty}".padLeft(valWidth, ' ');
+    lines.add("$firstLineName $qtyStr $valStr");
+    
+    // Subsequent lines contain wrapped name parts, with spaces for Qty and Price columns
+    for (int i = 1; i < nameLines.length; i++) {
+      final lineName = nameLines[i].padRight(nameWidth, ' ');
+      final emptyQty = "".padRight(qtyWidth, ' ');
+      final emptyVal = "".padLeft(valWidth, ' ');
+      lines.add("$lineName $emptyQty $emptyVal");
+    }
+  }
+  
+  lines.add(divider);
+  
+  final int rawItemTotal = items.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
+  final int discountAmount = (rawItemTotal * discountPercent / 100).round();
+  
+  String _formatRow(String left, String right) {
+    int spaces = width - left.length - right.length;
+    if (spaces < 1) {
+      int safeLeft = width - right.length - 1;
+      if (safeLeft > 0) {
+        left = left.substring(0, safeLeft);
+      } else {
+        left = "";
+      }
+      spaces = 1;
+    }
+    return left + (' ' * spaces) + right;
+  }
+  
+  if (discountPercent > 0) {
+    final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
+    lines.add(_formatRow("Items Total:", "Rs.$rawItemTotal"));
+    lines.add(_formatRow(label, "-Rs.$discountAmount"));
+  }
+  
+  lines.add(_formatRow("Subtotal:", "Rs.$subtotal"));
+  if (state.showGstOnBills && gst > 0) {
+    lines.add(_formatRow("CGST:", "Rs.${(gst / 2.0).toStringAsFixed(2)}"));
+    lines.add(_formatRow("SGST:", "Rs.${(gst / 2.0).toStringAsFixed(2)}"));
+  }
+  lines.add(_formatRow("Packaging:", "Rs.$packaging"));
+  if (state.showGstOnBills && gst > 0) {
+    lines.add(_formatRow("Tax Mode:", state.isGstInclusive ? "Inclusive" : "Exclusive"));
+  }
+  lines.add(divider);
+  lines.add(_formatRow("GRAND TOTAL:", "Rs.$total"));
+  lines.add(divider);
+  lines.add("      Thank You! Please Visit Again");
+  lines.add(divider);
+  
+  return lines.join('\n');
+}
+
+String formatSalesReportText({
+  required AppState state,
+  required String dateRangeStr,
+  required int totalBills,
+  required int totalGross,
+  required int totalGst,
+  required int totalPackaging,
+  bool includeTransactionLog = false,
+  List<InvoiceModel>? invoices,
+}) {
+  final int width = state.rollWidth == 3 ? 48 : 32;
+  final List<String> lines = [];
+  
+  final String divider = "=" * width;
+  final String dividerSmall = "-" * width;
+  
+  String _formatRow(String left, String right) {
+    int spaces = width - left.length - right.length;
+    if (spaces < 1) {
+      int safeLeft = width - right.length - 1;
+      if (safeLeft > 0) {
+        left = left.substring(0, safeLeft);
+      } else {
+        left = "";
+      }
+      spaces = 1;
+    }
+    return left + (' ' * spaces) + right;
+  }
+  
+  lines.add(divider);
+  
+  // Center store name roughly
+  final storeName = state.storeName;
+  if (storeName.length < width) {
+    int pad = (width - storeName.length) ~/ 2;
+    lines.add((' ' * pad) + storeName);
+  } else {
+    lines.add(storeName);
+  }
+  
+  if (state.storeGstin.isNotEmpty) {
+    final gstin = "GSTIN: ${state.storeGstin}";
+    if (gstin.length < width) {
+      int pad = (width - gstin.length) ~/ 2;
+      lines.add((' ' * pad) + gstin);
+    } else {
+      lines.add(gstin);
+    }
+  }
+  lines.add(divider);
+  
+  final title = "SALES REPORT";
+  int tPad = (width - title.length) ~/ 2;
+  lines.add((' ' * tPad) + title);
+  
+  lines.add("Period: $dateRangeStr");
+  lines.add(dividerSmall);
+  
+  lines.add(_formatRow("Total Bills:", "$totalBills"));
+  lines.add(_formatRow("Total Sales:", "Rs.$totalGross"));
+  if (totalGst > 0) {
+    lines.add(_formatRow("Total GST:", "Rs.$totalGst"));
+  }
+  // Packaging is hidden in CA report to avoid exposing Secret Ledger dump amounts
+  
+  lines.add(dividerSmall);
+  
+  if (includeTransactionLog && invoices != null && invoices.isNotEmpty) {
+    lines.add("");
+    final txTitle = "TRANSACTION LOG";
+    int txPad = (width - txTitle.length) ~/ 2;
+    lines.add((' ' * txPad) + txTitle);
+    lines.add(dividerSmall);
+    
+    // Table Header
+    if (width >= 48) {
+      lines.add("Sr  Date  Bill No   Subtot  GST   Total");
+    } else {
+      lines.add("Sr Date  Bill#  Sub  GST Total"); // 2+1+5+1+5+1+4+1+3+1+5 = 28 chars, plenty of space
+    }
+    lines.add(dividerSmall);
+    
+    // Sort oldest first for log
+    final sorted = List<InvoiceModel>.from(invoices);
+    sorted.sort((a, b) => a.parsedDateTime.compareTo(b.parsedDateTime));
+    
+    int totalLogSub = 0;
+    int totalLogGst = 0;
+    int totalLogTotal = 0;
+
+    for (int i = 0; i < sorted.length; i++) {
+      final inv = sorted[i];
+      final sr = (i + 1).toString();
+      final dateStr = "${inv.parsedDateTime.day.toString().padLeft(2, '0')}/${inv.parsedDateTime.month.toString().padLeft(2, '0')}";
+      
+      // Extract just the number from INV-1234 -> 1234 to save space
+      String shortId = inv.id.contains('-') ? inv.id.split('-').last : inv.id;
+      if (shortId.length > 5) shortId = shortId.substring(shortId.length - 5);
+
+      // Hide packaging in the transaction log by adding it to subtotal
+      // This ensures that DisplaySub + GST = Total is always mathematically flawless.
+      final displaySub = inv.total - inv.gst;
+      final sub = displaySub.toString();
+      final gst = inv.gst.toString();
+      final tot = inv.total.toString();
+      
+      totalLogSub += displaySub;
+      totalLogGst += inv.gst;
+      totalLogTotal += inv.total;
+
+      if (width >= 48) {
+        lines.add("${sr.padRight(3)} ${dateStr.padRight(5)} ${shortId.padRight(9)} ${sub.padLeft(6)} ${gst.padLeft(4)} ${tot.padLeft(7)}");
+      } else {
+        // Build the compact string for 32 chars
+        final compactRow = "${sr.padRight(2)} ${dateStr} ${shortId.padRight(5)} ${sub.padLeft(4)} ${gst.padLeft(3)} ${tot.padLeft(5)}";
+        
+        if (compactRow.length > 32) {
+          // If amounts are too huge (e.g. 1 Lakh), it exceeds 32 chars.
+          // Shift the amounts to the next line neatly.
+          lines.add("${sr.padRight(2)} ${dateStr} Bill: ${shortId}");
+          // Right align the amounts under the first line
+          final amountsRow = "Sub:${sub} GST:${gst} Tot:${tot}";
+          int padLen = 32 - amountsRow.length;
+          if (padLen < 0) padLen = 0;
+          lines.add((' ' * padLen) + amountsRow);
+        } else {
+          lines.add(compactRow);
+        }
+      }
+    }
+    lines.add(dividerSmall);
+    lines.add(_formatRow("GRAND TOTAL:", "Rs.$totalLogTotal"));
+    lines.add(dividerSmall);
+  }
+  
+  lines.add(divider);
+  
+  return lines.join('\n');
+}
+
 Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
   if (kIsWeb) {
     try {
@@ -9860,7 +10880,7 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
         final socket = await Socket.connect(state.printerIpAddress, 9100, timeout: const Duration(seconds: 5));
         
         // Generate beautiful ESC/POS bytes
-        final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName);
+        final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName, state.rollWidth);
         
         socket.add(bytes);
         
@@ -9909,7 +10929,7 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
           }
 
           // Generate beautiful ESC/POS bytes
-          final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName);
+          final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName, state.rollWidth);
           
           final bool result = await PrintBluetoothThermal.writeBytes(bytes);
 
@@ -11135,20 +12155,10 @@ class _SecretLedgerViewState extends State<SecretLedgerView> {
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (inv.originalTotal != null && inv.originalTotal != inv.total) ...[
-                                      Text(
-                                        '₹${inv.originalTotal}',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.white38,
-                                          decoration: TextDecoration.lineThrough,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                    ],
                                     Text(
                                       '₹${inv.total}',
                                       style: const TextStyle(
+
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                         color: Color(0xFFFF6F24),
@@ -11851,6 +12861,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                             id: widget.invoice.id,
                             tableId: widget.invoice.tableId,
                             dateTime: widget.invoice.dateTime,
+                            checkInTime: widget.invoice.checkInTime,
                             items: _items,
                             subtotal: _subtotal,
                             gst: _gst,
@@ -11897,13 +12908,6 @@ Future<void> printMonospacedReceiptHelper(BuildContext context, AppState state) 
   final del = state.cartDelivery;
   final tot = state.cartTotal;
 
-  final List<String> lines = [];
-  lines.add("========================================");
-  lines.add("       ${state.storeName}");
-  if (state.storeGstin.isNotEmpty) {
-    lines.add("        GSTIN: ${state.storeGstin}");
-  }
-  lines.add("========================================");
   final occupiedIso = state.tableOccupiedTimes[state.selectedTableId];
   String? checkInStr;
   if (occupiedIso != null) {
@@ -11924,47 +12928,28 @@ Future<void> printMonospacedReceiptHelper(BuildContext context, AppState state) 
   final ampm = now.hour >= 12 ? 'PM' : 'AM';
   final nowStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, $hStr:$mStr:$sStr $ampm";
 
-  lines.add("Table/Parcel: ${state.selectedTableId ?? ''}");
-  if (checkInStr != null) {
-    lines.add("Check-In:  $checkInStr");
-    lines.add("Check-Out: $nowStr");
-  } else {
-    lines.add("Date: $nowStr");
+  int startOffset = 0;
+  if (state.saasLicenseKey.trim().toUpperCase() == 'LIC-JQEL-CG2V-2ECX') {
+    startOffset = 5427;
   }
-  lines.add("========================================");
-  lines.add("ITEMS:");
+  final nextSeqNum = startOffset + state.invoices.length + 1;
+  final predictedInvoiceId = "${state.invoiceCode}-$nextSeqNum";
+
+  final receiptText = formatReceiptText(
+    state: state,
+    tableId: state.selectedTableId,
+    checkInTime: checkInStr,
+    checkoutTime: nowStr,
+    items: state.activeCart,
+    subtotal: sub.round(),
+    gst: tax.round(),
+    packaging: del.round(),
+    total: tot.round(),
+    discountPercent: state.cartDiscountPercent,
+    invoiceId: predictedInvoiceId,
+  );
   
-  for (var item in state.activeCart) {
-    final nameStr = item.name.padRight(24, '.');
-    final qtyStr = "${item.qty}x".padRight(6, ' ');
-    final valStr = "Rs.${item.price * item.qty}".padLeft(10, ' ');
-    lines.add("$nameStr$qtyStr$valStr");
-  }
-  
-  lines.add("========================================");
-  final rawItemTotal = state.activeCart.fold<int>(0, (sum, item) => sum + (item.price * item.qty));
-  final discountPercent = state.cartDiscountPercent;
-  final discountAmount = (rawItemTotal * discountPercent / 100).round();
-  if (discountPercent > 0) {
-    final label = "Discount (${discountPercent.toStringAsFixed(0)}%):";
-    final labelPadded = label.padRight(19, ' ');
-    lines.add("Items Total:       ${"Rs.$rawItemTotal".padLeft(21, ' ')}");
-    lines.add("$labelPadded${"-Rs.$discountAmount".padLeft(21, ' ')}");
-  }
-  lines.add("Subtotal:          ${"Rs.$sub".padLeft(21, ' ')}");
-  if (state.showGstOnBills && tax > 0) {
-    lines.add("CGST:              ${"Rs.${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-    lines.add("SGST:              ${"Rs.${(tax / 2.0).toStringAsFixed(2)}".padLeft(21, ' ')}");
-  }
-  lines.add("Packaging:         ${"Rs.$del".padLeft(21, ' ')}");
-  if (state.showGstOnBills && tax > 0) {
-    lines.add("Tax Mode:          ${(state.isGstInclusive ? "Inclusive" : "Exclusive").padLeft(21, ' ')}");
-  }
-  lines.add("========================================");
-  lines.add("GRAND TOTAL:       ${"Rs.$tot".padLeft(21, ' ')}");
-  lines.add("========================================");
-  lines.add("      Thank You! Please Visit Again");
-  lines.add("========================================");
+  final List<String> lines = [receiptText];
 
   final success = await executeReceiptPrint(lines.join('\n'), state);
   if (!success) {

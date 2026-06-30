@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'storage_helper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'firestore_service.dart';
 import 'js_interface.dart' as js;
 import 'tenant_db_manager.dart';
@@ -80,6 +81,7 @@ class CartItem {
   final String category;
   final int gstRate;
   int qty;
+  int printedQty;
 
   CartItem({
     required this.id,
@@ -88,6 +90,7 @@ class CartItem {
     required this.category,
     required this.qty,
     this.gstRate = 5,
+    this.printedQty = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -97,6 +100,7 @@ class CartItem {
     'category': category,
     'qty': qty,
     'gstRate': gstRate,
+    'printedQty': printedQty,
   };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -106,6 +110,7 @@ class CartItem {
     category: json['category'],
     qty: json['qty'],
     gstRate: json['gstRate'] ?? 5,
+    printedQty: json['printedQty'] ?? 0,
   );
 }
 
@@ -420,9 +425,11 @@ class AppState extends ChangeNotifier {
   List<MenuItem> menu = [];
   List<CategoryModel> categories = [];
   List<String> get categoriesList => categories.map((c) => c.name).toList();
+  String cachedDeviceName = 'Unknown Device';
 
   // Active UI Navigation state
   String? selectedTableId;
+  List<CartItem> draftCart = [];
   String currentCategory = 'SANDWICH';
   String activeView = 'home'; // home, invoices, search, reports-revenue, reports-menu, reports-accounts, etc.
   List<String> viewHistory = [];
@@ -435,7 +442,7 @@ class AppState extends ChangeNotifier {
   String saasLicenseKey = "";
   int saasRate = 0;
   String saasTitle = "Service Suspended";
-  String saasQRCodeUrl = "";
+  String saasQRCodeUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D9979711149%40ybl%26pn%3DRestroSaaS%26cu%3DINR";
   String saasAnnouncement = "Scan to Pay & Renew";
   String saasSupportPhone = "9979711149";
   List<String> saasRegisteredDevices = [];
@@ -465,6 +472,7 @@ class AppState extends ChangeNotifier {
   bool _isMockOffline = false;
   bool get isMockOffline => _isMockOffline;
   Timer? _internetCheckTimer;
+  bool _isPushingLocalData = false;
 
   String _defaultParcelMode = 'delivery'; // 'pickup' or 'delivery'
   String get defaultParcelMode => _defaultParcelMode;
@@ -1015,6 +1023,87 @@ class AppState extends ChangeNotifier {
   Timer? _cartSyncDebounce;
   bool _hasTenantDb = false;
 
+  StreamSubscription? _tablesSubscription;
+  StreamSubscription? _invoicesSubscription;
+  StreamSubscription? _usersSubscription;
+  StreamSubscription? _menuSubscription;
+  StreamSubscription? _categoriesSubscription;
+  StreamSubscription? _saasCentralDbSubscription;
+
+  String parseUserAgent(String ua) {
+    if (ua.contains('Android')) {
+      try {
+        final regExp = RegExp(r'Android\s+[^;]+;\s+([^)]+)');
+        final match = regExp.firstMatch(ua);
+        if (match != null && match.groupCount >= 1) {
+          final model = match.group(1)!.split(';').first.trim();
+          return "Android ($model)";
+        }
+      } catch (_) {}
+      return "Android Device";
+    }
+    if (ua.contains('iPhone') || ua.contains('iPad') || ua.contains('iPod')) {
+      if (ua.contains('iPhone')) return "iPhone";
+      if (ua.contains('iPad')) return "iPad";
+      return "iOS Device";
+    }
+    if (ua.contains('Windows')) {
+      String browser = "Browser";
+      if (ua.contains('Edg/')) browser = "Edge";
+      else if (ua.contains('Chrome/')) browser = "Chrome";
+      else if (ua.contains('Firefox/')) browser = "Firefox";
+      else if (ua.contains('Safari/')) browser = "Safari";
+      return "Windows ($browser)";
+    }
+    if (ua.contains('Macintosh')) {
+      return "macOS Device";
+    }
+    if (ua.contains('Linux')) {
+      return "Linux Device";
+    }
+    return "Web Terminal";
+  }
+
+  Future<void> loadDeviceName() async {
+    if (kIsWeb) {
+      try {
+        final userAgent = js.context['navigator']['userAgent'] as String;
+        cachedDeviceName = parseUserAgent(userAgent);
+      } catch (e) {
+        cachedDeviceName = "Web Browser (${defaultTargetPlatform.name.toUpperCase()})";
+      }
+      return;
+    }
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        final brand = androidInfo.brand;
+        final model = androidInfo.model;
+        final brandCapitalized = brand.isNotEmpty 
+            ? "${brand[0].toUpperCase()}${brand.substring(1)}" 
+            : brand;
+        cachedDeviceName = "$brandCapitalized $model";
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        cachedDeviceName = iosInfo.name;
+      } else if (Platform.isMacOS) {
+        final macInfo = await deviceInfo.macOsInfo;
+        cachedDeviceName = macInfo.computerName;
+      } else if (Platform.isWindows) {
+        final winInfo = await deviceInfo.windowsInfo;
+        cachedDeviceName = winInfo.computerName;
+      } else {
+        cachedDeviceName = defaultTargetPlatform.name.toUpperCase();
+      }
+    } catch (e) {
+      cachedDeviceName = defaultTargetPlatform.name.toUpperCase();
+    }
+  }
+
+  String getDeviceName() {
+    return cachedDeviceName;
+  }
 
   AppState() {
     init();
@@ -1022,6 +1111,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     await LocalStorageHelper.init();
+    await loadDeviceName();
     
     cloudInvoicesLimit = int.tryParse(LocalStorageHelper.getString('ahar_cloud_invoices_limit') ?? '100') ?? 100;
     
@@ -1136,7 +1226,7 @@ class AppState extends ChangeNotifier {
       saveTables();
     }
 
-    final currentMenuVersion = 'v12';
+    final currentMenuVersion = 'v15';
     final savedMenuVersion = LocalStorageHelper.getString('ahar_menu_version');
     if (savedMenuVersion != currentMenuVersion) {
           // Reset categories to defaultCategories on menu version bump
@@ -1243,10 +1333,43 @@ class AppState extends ChangeNotifier {
     currentCategory = LocalStorageHelper.getString('ahar_current_category') ?? 'SANDWICH';
     final savedTableId = LocalStorageHelper.getString('ahar_selected_table_id');
     selectedTableId = (savedTableId != null && savedTableId.isNotEmpty) ? savedTableId : null;
+    if (selectedTableId != null) {
+      draftCart = List.from(activeCarts[selectedTableId!]?.map((i) => CartItem(
+        id: i.id,
+        name: i.name,
+        price: i.price,
+        category: i.category,
+        qty: i.qty,
+        gstRate: i.gstRate,
+        printedQty: i.printedQty,
+      )) ?? []);
+    }
 
     // Pre-population of busy tables and sample invoices has been removed to start with a clean state.
 
-    // Initialize SaaS checking and setup poller (every 60 seconds to save Firestore quota)
+    // Initialize SaaS checking and setup realtime subscription to central_db
+    _saasCentralDbSubscription = FirebaseFirestore.instance
+        .collection('saas_data')
+        .doc('central_db')
+        .snapshots()
+        .listen((snap) {
+      if (snap.exists) {
+        final dbJson = snap.data()?['dbJson'] as String?;
+        if (dbJson != null && dbJson.isNotEmpty) {
+          LocalStorageHelper.setString('saas_central_db', dbJson);
+          try {
+            final decoded = jsonDecode(dbJson);
+            if (decoded is Map<String, dynamic>) {
+              _hasFetchedCloudDb = true;
+              checkSaaSStatus();
+            }
+          } catch (e) {
+            debugPrint('Error decoding central_db update: $e');
+          }
+        }
+      }
+    });
+
     checkSaaSStatus();
     _licensePoller = Timer.periodic(const Duration(seconds: 60), (timer) {
       checkSaaSStatus();
@@ -1277,10 +1400,14 @@ class AppState extends ChangeNotifier {
 
     // Try to sync with Firestore initial data on startup if license is active AND has a tenant DB
     if (saasLicenseKey.isNotEmpty && _hasTenantDb) {
-      syncDataFromCloud().catchError((e) {
+      syncDataFromCloud().then((_) {
+        startRealtimeSync();
+      }).catchError((e) {
         debugPrint('[Firestore] Startup pull failed: $e');
         cloudStatus = 'offline';
         notifyListeners();
+        // Register listeners anyway so we can sync when connection is restored!
+        startRealtimeSync();
       });
     } else if (saasLicenseKey.isNotEmpty && !_hasTenantDb) {
       debugPrint('[LOCAL MODE] No tenant DB. App running fully offline with local data.');
@@ -1300,6 +1427,12 @@ class AppState extends ChangeNotifier {
     _cloudSyncTimer?.cancel();
     _cartSyncDebounce?.cancel();
     _internetCheckTimer?.cancel();
+    _tablesSubscription?.cancel();
+    _invoicesSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _menuSubscription?.cancel();
+    _categoriesSubscription?.cancel();
+    _saasCentralDbSubscription?.cancel();
     super.dispose();
   }
 
@@ -1307,7 +1440,7 @@ class AppState extends ChangeNotifier {
     try {
       debugPrint('[Firestore] Wiping old data from tenant Firebase...');
       final db = TenantDbManager.instance;
-      final collections = ['menu_items', 'categories', 'invoices', 'tables'];
+      final collections = ['menu_items', 'categories', 'invoices', 'tables', 'users'];
       for (var col in collections) {
         final snap = await db.collection(col).get();
         if (snap.docs.isNotEmpty) {
@@ -1322,6 +1455,96 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       debugPrint('[Firestore] Error wiping data: $e');
     }
+  }
+
+  void startRealtimeSync() {
+    if (saasLicenseKey.isEmpty || !_hasTenantDb) return;
+    
+    final db = TenantDbManager.instance;
+    
+    // Listen to tables
+    _tablesSubscription?.cancel();
+    _tablesSubscription = db.collection('${saasLicenseKey}_tables').snapshots().listen((snap) {
+      final List<TableModel> newTables = [];
+      final Map<String, List<CartItem>> newCarts = {};
+      final Map<String, String> newTimes = {};
+      
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final tableId = doc.id;
+        
+        newTables.add(TableModel(
+          id: tableId,
+          type: data['type'] ?? 'table',
+        ));
+        
+        final occupyTime = data['occupyTime'] as String?;
+        if (occupyTime != null && occupyTime.isNotEmpty) {
+          newTimes[tableId] = occupyTime;
+        }
+        final itemsList = data['items'] as List?;
+        if (itemsList != null && itemsList.isNotEmpty) {
+          newCarts[tableId] = itemsList.map((i) => CartItem.fromJson(Map<String, dynamic>.from(i))).toList();
+        }
+      }
+      
+      if (newTables.isNotEmpty) {
+        tables = newTables;
+        activeCarts = newCarts;
+        tableOccupiedTimes = newTimes;
+        LocalStorageHelper.setString('ahar_tables', jsonEncode(tables.map((t) => t.toJson()).toList()));
+        LocalStorageHelper.setString('ahar_active_carts', jsonEncode(activeCarts.map((k, v) => MapEntry(k, v.map((i) => i.toJson()).toList()))));
+        LocalStorageHelper.setString('ahar_table_occupied_times', jsonEncode(tableOccupiedTimes));
+        notifyListeners();
+      }
+    });
+
+    // Listen to invoices
+    _invoicesSubscription?.cancel();
+    _invoicesSubscription = db.collection('${saasLicenseKey}_invoices').snapshots().listen((snap) {
+      final List<InvoiceModel> newInvoices = snap.docs.map((d) => InvoiceModel.fromJson(d.data())).toList();
+      if (newInvoices.isNotEmpty) {
+        invoices = newInvoices;
+        invoices.sort((a, b) => b.parsedDateTime.compareTo(a.parsedDateTime));
+        LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
+        notifyListeners();
+      }
+    });
+
+    // Listen to users
+    _usersSubscription?.cancel();
+    _usersSubscription = db.collection('${saasLicenseKey}_users').snapshots().listen((snap) {
+      final List<UserProfile> newUsers = snap.docs.map((d) => UserProfile.fromJson(d.data())).toList();
+      if (newUsers.isNotEmpty) {
+        users = newUsers;
+        LocalStorageHelper.setString('ahar_users', jsonEncode(users.map((u) => u.toJson()).toList()));
+        notifyListeners();
+      }
+    });
+
+    // Listen to menu items
+    _menuSubscription?.cancel();
+    _menuSubscription = db.collection('${saasLicenseKey}_menu_items').snapshots().listen((snap) {
+      final List<MenuItem> newMenu = snap.docs.map((d) => MenuItem.fromJson(d.data())).toList();
+      if (newMenu.isNotEmpty) {
+        menu = newMenu;
+        menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
+        LocalStorageHelper.setString('ahar_menu_items', jsonEncode(menu.map((m) => m.toJson()).toList()));
+        notifyListeners();
+      }
+    });
+
+    // Listen to categories
+    _categoriesSubscription?.cancel();
+    _categoriesSubscription = db.collection('${saasLicenseKey}_categories').snapshots().listen((snap) {
+      final List<CategoryModel> newCategories = snap.docs.map((d) => CategoryModel.fromJson(d.data())).toList();
+      if (newCategories.isNotEmpty) {
+        categories = newCategories;
+        categories.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
+        LocalStorageHelper.setString('ahar_categories', jsonEncode(categories.map((c) => c.toJson()).toList()));
+        notifyListeners();
+      }
+    });
   }
 
   /// Checks if the admin (Himanshu) has assigned a dbConfig to this license key.
@@ -1341,6 +1564,7 @@ class AppState extends ChangeNotifier {
             await TenantDbManager.initialize(Map<String, dynamic>.from(l['dbConfig']));
             _hasTenantDb = true;
             await syncDataFromCloud();
+            startRealtimeSync();
             debugPrint('[UPGRADE] Successfully upgraded to cloud mode!');
           }
           break;
@@ -1366,6 +1590,7 @@ class AppState extends ChangeNotifier {
          // Force push the new local menu and categories to the clean firebase
          await FirestoreService.syncCategories(categories, saasLicenseKey);
          await FirestoreService.syncMenu(menu, saasLicenseKey);
+         await FirestoreService.syncUsers(users, saasLicenseKey);
       }
 
       final cloudData = await FirestoreService.pullInitialData(saasLicenseKey);
@@ -1391,8 +1616,27 @@ class AppState extends ChangeNotifier {
             LocalStorageHelper.setString('ahar_categories', jsonEncode(categories.map((c) => c.toJson()).toList()));
           }
         }
+        if (cloudData.containsKey('users')) {
+          if (_didMigrateThisLaunch) {
+            await FirestoreService.syncUsers(users, saasLicenseKey);
+          } else {
+            users = List<UserProfile>.from(cloudData['users']);
+            LocalStorageHelper.setString('ahar_users', jsonEncode(users.map((u) => u.toJson()).toList()));
+          }
+        }
         if (cloudData.containsKey('invoices')) {
-          invoices = List<InvoiceModel>.from(cloudData['invoices']);
+          final cloudInvoices = List<InvoiceModel>.from(cloudData['invoices']);
+          final Map<String, InvoiceModel> invoiceMap = {};
+          for (final inv in cloudInvoices) {
+            invoiceMap[inv.id] = inv;
+          }
+          for (final inv in invoices) {
+            if (!invoiceMap.containsKey(inv.id)) {
+              invoiceMap[inv.id] = inv;
+            }
+          }
+          invoices = invoiceMap.values.toList();
+          invoices.sort((a, b) => b.parsedDateTime.compareTo(a.parsedDateTime));
           LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
         }
         if (cloudData.containsKey('activeCarts')) {
@@ -1432,6 +1676,8 @@ class AppState extends ChangeNotifier {
       debugPrint('[LOCAL MODE] Skipping cloud push — no tenant DB configured.');
       return;
     }
+    if (_isPushingLocalData) return;
+    _isPushingLocalData = true;
     cloudStatus = 'syncing';
     notifyListeners();
     try {
@@ -1443,6 +1689,7 @@ class AppState extends ChangeNotifier {
       );
       await FirestoreService.syncMenu(menu, saasLicenseKey);
       await FirestoreService.syncCategories(categories, saasLicenseKey);
+      await FirestoreService.syncUsers(users, saasLicenseKey);
       await FirestoreService.syncInvoices(invoices, saasLicenseKey);
       // Throttle diagnostic sync to once per 5 minutes to save bandwidth/quota
       final lastSync = LocalStorageHelper.getString('ahar_last_bt_sync');
@@ -1457,6 +1704,8 @@ class AppState extends ChangeNotifier {
       debugPrint('[Firestore] Error pushing local data to cloud: $e');
       cloudStatus = 'offline';
       notifyListeners();
+    } finally {
+      _isPushingLocalData = false;
     }
   }
 
@@ -1579,6 +1828,25 @@ class AppState extends ChangeNotifier {
       if (foundIdx != -1) {
         final nowIso = DateTime.now().toIso8601String();
         licensesList[foundIdx]['lastSeen'] = nowIso;
+        
+        // Ensure current device is in pins with its deviceName
+        final pins = licensesList[foundIdx]['pins'] != null ? Map<String, dynamic>.from(licensesList[foundIdx]['pins']) : {};
+        final currentDevId = getOrCreateDeviceId();
+        if (pins[currentDevId] != null && pins[currentDevId] is Map) {
+          final devInfo = Map<String, dynamic>.from(pins[currentDevId] as Map);
+          if (devInfo['deviceName'] == null) {
+            devInfo['deviceName'] = getDeviceName();
+            pins[currentDevId] = devInfo;
+            licensesList[foundIdx]['pins'] = pins;
+          }
+        } else {
+          pins[currentDevId] = {
+            'pin': 'Not Set',
+            'name': 'Unknown',
+            'deviceName': getDeviceName(),
+          };
+          licensesList[foundIdx]['pins'] = pins;
+        }
         
         // Update locally first for responsiveness, then async push
         await LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObj));
@@ -1787,6 +2055,9 @@ class AppState extends ChangeNotifier {
       try {
         final settings = jsonDecode(rawSettings);
         saasQRCodeUrl = settings['paymentQRCodeUrl'] ?? '';
+        if (saasQRCodeUrl.isEmpty) {
+          saasQRCodeUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi%3A%2F%2Fpay%3Fpa%3D9979711149%40ybl%26pn%3DRestroSaaS%26cu%3DINR";
+        }
         saasAnnouncement = settings['announcement'] ?? 'Scan to Pay & Renew';
         saasSupportPhone = settings['supportPhone'] ?? '9979711149';
       } catch (_) {}
@@ -1981,8 +2252,7 @@ class AppState extends ChangeNotifier {
           if (ownerIdx != -1) {
             final String nameToUse = ownerName != null && ownerName.isNotEmpty ? "$ownerName (Owner)" : users[ownerIdx].name;
             users[ownerIdx] = UserProfile(name: nameToUse, pin: ownerPin, role: users[ownerIdx].role);
-            final jsonStr = jsonEncode(users.map((u) => u.toJson()).toList());
-            LocalStorageHelper.setString('ahar_users', jsonStr);
+            saveUsers();
             if (loggedInUser != null && loggedInUser!.role == 'owner') {
               loggedInUser = users[ownerIdx];
             }
@@ -1992,12 +2262,13 @@ class AppState extends ChangeNotifier {
           final newPinObj = {
             'pin': ownerPin,
             'name': ownerName ?? '',
+            'deviceName': getDeviceName(),
           };
           
           bool pinObjChanged = true;
           if (pins[currentDevId] != null && pins[currentDevId] is Map) {
             final existing = pins[currentDevId] as Map;
-            if (existing['pin'] == ownerPin && existing['name'] == ownerName) {
+            if (existing['pin'] == ownerPin && existing['name'] == ownerName && existing['deviceName'] == getDeviceName()) {
               pinObjChanged = false;
             }
           }
@@ -2058,6 +2329,7 @@ class AppState extends ChangeNotifier {
         if (_hasTenantDb) {
           // Sync data from cloud for this license key (CLOUD MODE)
           await syncDataFromCloud();
+          startRealtimeSync();
         } else {
           // LOCAL MODE: Load default menu data locally
           menu = List.from(newDefaultMenu);
@@ -2127,6 +2399,11 @@ class AppState extends ChangeNotifier {
     saasLocked = false;
     saasRegisteredDevices = [];
     _hasTenantDb = false;
+    _tablesSubscription?.cancel();
+    _invoicesSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _menuSubscription?.cancel();
+    _categoriesSubscription?.cancel();
     
     notifyListeners();
     return cloudRemoved;
@@ -2389,6 +2666,11 @@ class AppState extends ChangeNotifier {
 
   bool goBack() {
     if (viewHistory.isNotEmpty) {
+      final prevView = viewHistory.last;
+      if (prevView == 'home') {
+        selectedTableId = null;
+        draftCart.clear();
+      }
       activeView = viewHistory.removeLast();
       searchBarVisible = false;
       menuSearchQuery = '';
@@ -2396,6 +2678,8 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return true;
     } else if (activeView != 'home') {
+      selectedTableId = null;
+      draftCart.clear();
       activeView = 'home';
       searchBarVisible = false;
       menuSearchQuery = '';
@@ -2411,11 +2695,23 @@ class AppState extends ChangeNotifier {
     currentCategory = 'SANDWICH';
     searchBarVisible = false;
     menuSearchQuery = '';
+    
+    // Copy the active cart to draftCart (deep copy)
+    draftCart = List.from(activeCarts[tableId]?.map((i) => CartItem(
+      id: i.id,
+      name: i.name,
+      price: i.price,
+      category: i.category,
+      qty: i.qty,
+      gstRate: i.gstRate,
+      printedQty: i.printedQty,
+    )) ?? []);
+    
     saveNavigationState();
     navigateToView('menu');
   }
 
-  List<CartItem> get activeCart => activeCarts[selectedTableId] ?? [];
+  List<CartItem> get activeCart => selectedTableId != null ? draftCart : [];
 
   int get cartCount => activeCart.fold(0, (sum, item) => sum + item.qty);
 
@@ -2467,59 +2763,163 @@ class AppState extends ChangeNotifier {
     if (selectedTableId == null) return;
     playSystemSound();
     
-    final list = activeCarts[selectedTableId] ?? [];
-    if (list.isEmpty) {
-      tableOccupiedTimes[selectedTableId!] = DateTime.now().toIso8601String();
-    }
-    final existing = list.where((i) => i.id == item.id).toList();
+    final existing = draftCart.where((i) => i.id == item.id).toList();
 
     if (existing.isNotEmpty) {
       existing.first.qty++;
     } else {
-      list.add(CartItem(
+      draftCart.add(CartItem(
         id: item.id,
         name: item.name,
         price: item.price,
         category: item.category,
         qty: 1,
         gstRate: item.gstRate,
+        printedQty: 0,
       ));
     }
     
-    activeCarts[selectedTableId!] = list;
-    saveCarts();
     notifyListeners();
   }
 
   void updateQty(int itemId, int change) {
     if (selectedTableId == null) return;
 
-    final list = activeCarts[selectedTableId] ?? [];
-    final items = list.where((i) => i.id == itemId).toList();
+    final items = draftCart.where((i) => i.id == itemId).toList();
 
     if (items.isNotEmpty) {
       final item = items.first;
       item.qty += change;
       if (item.qty <= 0) {
-        list.removeWhere((i) => i.id == itemId);
+        draftCart.removeWhere((i) => i.id == itemId);
       }
     }
 
-    if (list.isEmpty) {
-      activeCarts.remove(selectedTableId);
-      tableOccupiedTimes.remove(selectedTableId);
-    } else {
-      activeCarts[selectedTableId!] = list;
-    }
-
-    saveCarts();
     notifyListeners();
   }
 
   void clearCart() {
     if (selectedTableId == null) return;
-    activeCarts.remove(selectedTableId);
-    tableOccupiedTimes.remove(selectedTableId);
+    draftCart.clear();
+    notifyListeners();
+  }
+
+  List<CartItem> get newKOTItems {
+    if (selectedTableId == null) return [];
+    final List<CartItem> newItems = [];
+
+    for (var item in draftCart) {
+      final diffQty = item.qty - item.printedQty;
+      if (diffQty > 0) {
+        newItems.add(CartItem(
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          category: item.category,
+          qty: diffQty,
+          gstRate: item.gstRate,
+          printedQty: item.printedQty,
+        ));
+      }
+    }
+    return newItems;
+  }
+
+  void markKOTPrinted() {
+    if (selectedTableId == null) return;
+    for (var item in draftCart) {
+      item.printedQty = item.qty;
+    }
+    activeCarts[selectedTableId!] = List.from(draftCart);
+    if (!tableOccupiedTimes.containsKey(selectedTableId)) {
+      tableOccupiedTimes[selectedTableId!] = DateTime.now().toIso8601String();
+    }
+    saveCarts();
+    invalidateCache();
+    notifyListeners();
+  }
+
+  void saveDraftToActive() {
+    if (selectedTableId == null) return;
+    if (draftCart.isEmpty) {
+      activeCarts.remove(selectedTableId);
+      tableOccupiedTimes.remove(selectedTableId);
+    } else {
+      activeCarts[selectedTableId!] = List.from(draftCart.map((i) => CartItem(
+        id: i.id,
+        name: i.name,
+        price: i.price,
+        category: i.category,
+        qty: i.qty,
+        gstRate: i.gstRate,
+        printedQty: i.printedQty,
+      )));
+    }
+    saveCarts();
+    invalidateCache();
+    notifyListeners();
+  }
+
+  void confirmOrder() {
+    if (selectedTableId == null) return;
+    saveDraftToActive();
+    
+    // Start occupancy timer if not already active
+    if (!tableOccupiedTimes.containsKey(selectedTableId)) {
+      tableOccupiedTimes[selectedTableId!] = DateTime.now().toIso8601String();
+    }
+    
+    saveCarts();
+    selectedTableId = null;
+    draftCart.clear();
+    activeView = 'home';
+    viewHistory.clear();
+    saveNavigationState();
+    notifyListeners();
+  }
+
+  void cancelOrderDraft() {
+    selectedTableId = null;
+    draftCart.clear();
+    activeView = 'home';
+    viewHistory.clear();
+    saveNavigationState();
+    notifyListeners();
+  }
+
+  void discardDraftChanges() {
+    if (selectedTableId == null) return;
+    draftCart.removeWhere((item) => item.printedQty == 0);
+    for (var item in draftCart) {
+      item.qty = item.printedQty;
+    }
+    if (draftCart.isEmpty) {
+      activeCarts.remove(selectedTableId);
+      tableOccupiedTimes.remove(selectedTableId);
+    } else {
+      activeCarts[selectedTableId!] = List.from(draftCart);
+    }
+    saveCarts();
+    selectedTableId = null;
+    draftCart.clear();
+    activeView = 'home';
+    viewHistory.clear();
+    saveNavigationState();
+    notifyListeners();
+  }
+
+  void discardDraftForTable(String tableId) {
+    final list = activeCarts[tableId] ?? [];
+    list.removeWhere((item) => item.printedQty == 0);
+    for (var item in list) {
+      item.qty = item.printedQty;
+    }
+    if (list.isEmpty) {
+      activeCarts.remove(tableId);
+      tableOccupiedTimes.remove(tableId);
+    } else {
+      activeCarts[tableId] = list;
+    }
     saveCarts();
     notifyListeners();
   }
@@ -3203,14 +3603,27 @@ class AppState extends ChangeNotifier {
       UserProfile(name: "Priya (Cashier 2)", pin: "3333", role: "cashier"),
       UserProfile(name: "Amit (Cashier 3)", pin: "4444", role: "cashier"),
     ];
-    final jsonStr = jsonEncode(users.map((u) => u.toJson()).toList());
-    LocalStorageHelper.setString('ahar_users', jsonStr);
+    saveUsers();
+  }
+
+  void saveUsers() async {
+    LocalStorageHelper.setString('ahar_users', jsonEncode(users.map((u) => u.toJson()).toList()));
+    if (saasLicenseKey.isNotEmpty && _hasTenantDb) {
+      cloudStatus = 'syncing';
+      notifyListeners();
+      try {
+        await FirestoreService.syncUsers(users, saasLicenseKey);
+        cloudStatus = 'connected';
+      } catch (_) {
+        cloudStatus = 'offline';
+      }
+      notifyListeners();
+    }
   }
 
   void updateUsersList(List<UserProfile> newList) {
     users = newList;
-    final jsonStr = jsonEncode(users.map((u) => u.toJson()).toList());
-    LocalStorageHelper.setString('ahar_users', jsonStr);
+    saveUsers();
 
     if (loggedInUser != null) {
       final index = users.indexWhere((u) => u.name == loggedInUser!.name);
@@ -3250,8 +3663,7 @@ class AppState extends ChangeNotifier {
         return; // Cashiers cannot change owner settings!
       }
       users[idx] = UserProfile(name: name, pin: pin, role: users[idx].role);
-      final jsonStr = jsonEncode(users.map((u) => u.toJson()).toList());
-      LocalStorageHelper.setString('ahar_users', jsonStr);
+      saveUsers();
       loggedInUser = users[idx];
     }
     notifyListeners();
@@ -3517,7 +3929,7 @@ class AppState extends ChangeNotifier {
   void _startInternetCheckTimer() {
     _internetCheckTimer?.cancel();
     _runInternetCheck();
-    _internetCheckTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+    _internetCheckTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _runInternetCheck();
     });
   }
@@ -3527,9 +3939,34 @@ class AppState extends ChangeNotifier {
     if (connected != hasRealInternet) {
       hasRealInternet = connected;
       if (!hasRealInternet) {
-        if (_hasTenantDb) cloudStatus = 'offline';
+        if (_hasTenantDb) {
+          cloudStatus = 'offline';
+        }
+        try {
+          await FirebaseFirestore.instance.disableNetwork();
+          if (_hasTenantDb) {
+            await TenantDbManager.instance.disableNetwork();
+          }
+          debugPrint('[Firestore] Network disabled (offline mode).');
+        } catch (e) {
+          debugPrint('[Firestore] Error disabling network: $e');
+        }
       } else {
         cloudStatus = 'connected';
+        try {
+          await FirebaseFirestore.instance.enableNetwork();
+          if (_hasTenantDb) {
+            await TenantDbManager.instance.enableNetwork();
+          }
+          debugPrint('[Firestore] Network enabled (online mode).');
+        } catch (e) {
+          debugPrint('[Firestore] Error enabling network: $e');
+        }
+        if (_hasTenantDb) {
+          // Internet has been restored! Let's auto-sync and reconnect!
+          startRealtimeSync();
+          pushLocalDataToCloud();
+        }
       }
       notifyListeners();
     }
@@ -3593,7 +4030,7 @@ class AppState extends ChangeNotifier {
 
     int startOffset = 0;
     if (saasLicenseKey.trim().toUpperCase() == 'LIC-JQEL-CG2V-2ECX') {
-      startOffset = 5356;
+      startOffset = 5427;
     }
 
     for (int i = 0; i < invoices.length; i++) {
@@ -3605,6 +4042,7 @@ class AppState extends ChangeNotifier {
           id: newId,
           tableId: inv.tableId,
           dateTime: inv.dateTime,
+          checkInTime: inv.checkInTime,
           items: inv.items,
           subtotal: inv.subtotal,
           gst: inv.gst,
@@ -3763,6 +4201,7 @@ class AppState extends ChangeNotifier {
           id: inv.id,
           tableId: inv.tableId,
           dateTime: inv.dateTime,
+          checkInTime: inv.checkInTime,
           items: adjustedItems,
           subtotal: subtotal,
           gst: gst,
@@ -3794,6 +4233,7 @@ class AppState extends ChangeNotifier {
               id: currentInv.id,
               tableId: currentInv.tableId,
               dateTime: currentInv.dateTime,
+              checkInTime: currentInv.checkInTime,
               items: currentInv.items,
               subtotal: currentInv.subtotal,
               gst: currentInv.gst,
@@ -3874,6 +4314,7 @@ class AppState extends ChangeNotifier {
                 id: currentInv.id,
                 tableId: currentInv.tableId,
                 dateTime: currentInv.dateTime,
+                checkInTime: currentInv.checkInTime,
                 items: adjustedItems,
                 subtotal: subtotal,
                 gst: gst,
@@ -3898,6 +4339,7 @@ class AppState extends ChangeNotifier {
                 id: currentInv.id,
                 tableId: currentInv.tableId,
                 dateTime: currentInv.dateTime,
+                checkInTime: currentInv.checkInTime,
                 items: adjustedItems,
                 subtotal: subtotal,
                 gst: gst,
@@ -3936,6 +4378,7 @@ class AppState extends ChangeNotifier {
           id: inv.id,
           tableId: inv.tableId,
           dateTime: inv.dateTime,
+          checkInTime: inv.checkInTime,
           items: inv.items,
           subtotal: inv.subtotal,
           gst: inv.gst,
@@ -3982,6 +4425,7 @@ class AppState extends ChangeNotifier {
             id: inv.id,
             tableId: inv.tableId,
             dateTime: inv.dateTime,
+            checkInTime: inv.checkInTime,
             items: [item],
             subtotal: isGstInclusive
                 ? bestPrice - (bestPrice * menuItem.gstRate / (100 + menuItem.gstRate)).round()
@@ -4007,5 +4451,6 @@ class AppState extends ChangeNotifier {
 
     enforceSequentialInvoiceIds();
     invalidateCache();
+    notifyListeners();
   }
 }

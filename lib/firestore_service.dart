@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'app_state.dart';
+import 'tenant_db_manager.dart';
 
 class FirestoreService {
-  static FirebaseFirestore get _db => FirebaseFirestore.instance;
+  static FirebaseFirestore get _db => TenantDbManager.instance;
 
   // Sync Invoices to Firestore
   static Future<void> syncInvoices(List<InvoiceModel> invoices, String licenseKey) async {
@@ -11,7 +12,7 @@ class FirestoreService {
     try {
       final batch = _db.batch();
       for (final inv in invoices) {
-        final docRef = _db.collection('licenses').doc(licenseKey).collection('invoices').doc(inv.id);
+        final docRef = _db.collection('${licenseKey}_invoices').doc(inv.id);
         batch.set(docRef, inv.toJson(), SetOptions(merge: true));
       }
       await batch.commit().timeout(const Duration(seconds: 4));
@@ -32,7 +33,7 @@ class FirestoreService {
     try {
       final batch = _db.batch();
       for (final table in tables) {
-        final docRef = _db.collection('licenses').doc(licenseKey).collection('tables').doc(table.id);
+        final docRef = _db.collection('${licenseKey}_tables').doc(table.id);
         
         final cartList = activeCarts != null ? (activeCarts[table.id] ?? []) : [];
         final occupyTime = tableOccupiedTimes != null ? (tableOccupiedTimes[table.id] ?? '') : '';
@@ -60,7 +61,7 @@ class FirestoreService {
     try {
       final batch = _db.batch();
       for (final item in menu) {
-        final docRef = _db.collection('licenses').doc(licenseKey).collection('menu_items').doc(item.id.toString());
+        final docRef = _db.collection('${licenseKey}_menu_items').doc(item.id.toString());
         batch.set(docRef, item.toJson(), SetOptions(merge: true));
       }
       await batch.commit().timeout(const Duration(seconds: 4));
@@ -76,7 +77,7 @@ class FirestoreService {
     try {
       final batch = _db.batch();
       for (final cat in categories) {
-        final docRef = _db.collection('licenses').doc(licenseKey).collection('categories').doc(cat.name);
+        final docRef = _db.collection('${licenseKey}_categories').doc(cat.name);
         batch.set(docRef, cat.toJson(), SetOptions(merge: true));
       }
       await batch.commit().timeout(const Duration(seconds: 4));
@@ -86,19 +87,35 @@ class FirestoreService {
     }
   }
 
+  // Sync Users to Firestore
+  static Future<void> syncUsers(List<UserProfile> usersList, String licenseKey) async {
+    if (licenseKey.isEmpty) return;
+    try {
+      final batch = _db.batch();
+      for (final user in usersList) {
+        final docRef = _db.collection('${licenseKey}_users').doc(user.name);
+        batch.set(docRef, user.toJson(), SetOptions(merge: true));
+      }
+      await batch.commit().timeout(const Duration(seconds: 4));
+      debugPrint('[Firestore] Users synced successfully.');
+    } catch (e) {
+      debugPrint('[Firestore] Error syncing users: $e');
+    }
+  }
+
   // Pull Initial data from Firestore on Startup
   static Future<Map<String, dynamic>> pullInitialData(String licenseKey) async {
     final Map<String, dynamic> result = {};
     if (licenseKey.isEmpty) return result;
     try {
       // 1. Invoices
-      final invoicesSnap = await _db.collection('licenses').doc(licenseKey).collection('invoices').get().timeout(const Duration(seconds: 4));
+      final invoicesSnap = await _db.collection('${licenseKey}_invoices').get().timeout(const Duration(seconds: 4));
       if (invoicesSnap.docs.isNotEmpty) {
         result['invoices'] = invoicesSnap.docs.map((d) => InvoiceModel.fromJson(d.data())).toList();
       }
 
       // 2. Tables
-      final tablesSnap = await _db.collection('licenses').doc(licenseKey).collection('tables').get().timeout(const Duration(seconds: 4));
+      final tablesSnap = await _db.collection('${licenseKey}_tables').get().timeout(const Duration(seconds: 4));
       if (tablesSnap.docs.isNotEmpty) {
         result['tables'] = tablesSnap.docs.map((d) => TableModel.fromJson(d.data())).toList();
         final Map<String, List<CartItem>> activeCarts = {};
@@ -120,15 +137,21 @@ class FirestoreService {
       }
 
       // 3. Menu Items
-      final menuSnap = await _db.collection('licenses').doc(licenseKey).collection('menu_items').get().timeout(const Duration(seconds: 4));
+      final menuSnap = await _db.collection('${licenseKey}_menu_items').get().timeout(const Duration(seconds: 4));
       if (menuSnap.docs.isNotEmpty) {
         result['menu'] = menuSnap.docs.map((d) => MenuItem.fromJson(d.data())).toList();
       }
 
       // 4. Categories
-      final categoriesSnap = await _db.collection('licenses').doc(licenseKey).collection('categories').get().timeout(const Duration(seconds: 4));
+      final categoriesSnap = await _db.collection('${licenseKey}_categories').get().timeout(const Duration(seconds: 4));
       if (categoriesSnap.docs.isNotEmpty) {
         result['categories'] = categoriesSnap.docs.map((d) => CategoryModel.fromJson(d.data())).toList();
+      }
+
+      // 5. Users
+      final usersSnap = await _db.collection('${licenseKey}_users').get().timeout(const Duration(seconds: 4));
+      if (usersSnap.docs.isNotEmpty) {
+        result['users'] = usersSnap.docs.map((d) => UserProfile.fromJson(d.data())).toList();
       }
 
       debugPrint('[Firestore] Initial data pulled successfully from cloud.');
@@ -147,8 +170,6 @@ class FirestoreService {
       final recentLogs = logs.length > 15 ? logs.sublist(0, 15) : logs;
       for (final log in recentLogs) {
         final docRef = _db
-            .collection('licenses')
-            .doc(licenseKey)
             .collection('logs')
             .doc(log.timestamp.millisecondsSinceEpoch.toString());
         batch.set(docRef, log.toJson(), SetOptions(merge: true));

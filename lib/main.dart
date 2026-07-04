@@ -17,15 +17,17 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 
-// TODO: Put your actual Firebase credentials here to enable Web Firestore sync
+// Use the actual Firebase credentials for the ahar-77377 project
 const FirebaseOptions firebaseOptions = FirebaseOptions(
-  apiKey: "YOUR_API_KEY_HERE", // Paste your real API Key from Firebase console
-  authDomain: "control-panel-add47.firebaseapp.com",
-  projectId: "control-panel-add47",
-  storageBucket: "control-panel-add47.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID_HERE", // Paste your Messaging Sender ID
-  appId: "YOUR_APP_ID_HERE", // Paste your Web App ID
+  apiKey: "AIzaSyC1FE1COnXA4iA0vArfj_nPLT9WejbRgoc", 
+  authDomain: "ahar-77377.firebaseapp.com",
+  projectId: "ahar-77377",
+  storageBucket: "ahar-77377.firebasestorage.app",
+  messagingSenderId: "420187507844", 
+  appId: "1:420187507844:web:cd84759e03d1604b2c46d1", 
 );
 
 void main() async {
@@ -1153,7 +1155,7 @@ class SidebarDrawer extends StatelessWidget {
                   child: Text('RESTAURANT SETTINGS', style: TextStyle(fontSize: 10, color: Color(0xFF4B5563), fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                 ),
                 _buildNavItem(context, state, 'settings-tables', Icons.table_chart_outlined, 'Table Settings'),
-                _buildNavItem(context, state, 'settings-menu', Icons.fastfood_outlined, 'Menu Settings'),
+                _buildNavItem(context, state, 'settings-menu', Icons.fastfood_outlined, 'Menu Settings (${state.menu.length})'),
                 _buildNavItem(context, state, 'settings-categories', Icons.category_outlined, 'Category Settings'),
                 
                 const Padding(
@@ -3570,29 +3572,37 @@ class InvoicesListView extends StatelessWidget {
               Expanded(
                 child: state.filteredInvoices.isEmpty
                     ? const Center(child: Text('No past invoices found matching the filter.', style: TextStyle(color: Color(0xFF94A3B8))))
-                    : ListView.builder(
-                        itemCount: state.filteredInvoices.length,
-                        itemBuilder: (context, idx) {
-                          final inv = state.filteredInvoices[idx];
-                          return ListTile(
-                            title: Text(inv.id, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontFamily: 'monospace')),
-                            subtitle: Text('Table: ${inv.tableId} • ${inv.dateTime}', style: const TextStyle(color: Color(0xFF94A3B8))),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('₹${inv.total}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  onPressed: () {
-                                    state.selectedReceiptInvoice = inv;
-                                  },
-                                  icon: const Icon(Icons.receipt_long, color: Color(0xFF10B981)),
-                                  tooltip: 'View Bill',
-                                ),
-                              ],
-                            ),
-                          );
+                    : NotificationListener<ScrollNotification>(
+                        onNotification: (ScrollNotification scrollInfo) {
+                          if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
+                            state.loadMoreInvoices();
+                          }
+                          return false;
                         },
+                        child: ListView.builder(
+                          itemCount: state.filteredInvoices.length,
+                          itemBuilder: (context, idx) {
+                            final inv = state.filteredInvoices[idx];
+                            return ListTile(
+                              title: Text(inv.id, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontFamily: 'monospace')),
+                              subtitle: Text('Table: ${inv.tableId} • ${inv.dateTime}', style: const TextStyle(color: Color(0xFF94A3B8))),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('₹${inv.total}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    onPressed: () {
+                                      state.selectedReceiptInvoice = inv;
+                                    },
+                                    icon: const Icon(Icons.receipt_long, color: Color(0xFF10B981)),
+                                    tooltip: 'View Bill',
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
               ),
             ],
@@ -3698,13 +3708,15 @@ class _InvoicesSearchViewState extends State<InvoicesSearchView> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('${inv.id} (Table: ${inv.tableId})', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6366F1), fontFamily: 'monospace')),
-                                        const SizedBox(height: 4),
-                                        Text(inv.dateTime, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                                      ],
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('${inv.id} (Table: ${inv.tableId})', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6366F1), fontFamily: 'monospace')),
+                                          const SizedBox(height: 4),
+                                          Text(inv.dateTime, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                                        ],
+                                      ),
                                     ),
                                     Row(
                                       children: [
@@ -4497,7 +4509,7 @@ Future<void> generateAndShareSalesPdf(List<InvoiceModel> invoices, String storeN
 
   // Sort invoices chronologically (oldest first for a ledger statement)
   final sorted = List<InvoiceModel>.from(invoices);
-  sorted.sort((a, b) => a.parsedDateTime.compareTo(b.parsedDateTime));
+  sorted.sort(compareInvoicesAscending);
 
   pdf.addPage(
     pw.MultiPage(
@@ -4996,7 +5008,7 @@ class _AccountsReportViewState extends State<AccountsReportView> {
     }
     
     final sorted = List<InvoiceModel>.from(filteredInvoices);
-    sorted.sort((a, b) => b.parsedDateTime.compareTo(a.parsedDateTime));
+    sorted.sort(compareInvoicesDescending);
     
     return Container(
       width: double.infinity,
@@ -5876,7 +5888,26 @@ class TableSettingsView extends StatelessWidget {
                           const SizedBox(width: 16),
                           OutlinedButton.icon(
                             onPressed: () {
-                              state.deleteTable(table.id);
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Confirm Delete'),
+                                  content: Text('Are you sure you want to delete table ${table.id}?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        state.deleteTable(table.id);
+                                        Navigator.pop(ctx);
+                                      },
+                                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
                             },
                             icon: const Icon(Icons.delete, size: 14),
                             label: const Text('Delete'),
@@ -5930,7 +5961,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
         leading: MediaQuery.of(context).size.width <= 1100
             ? IconButton(icon: const Icon(Icons.menu), onPressed: () => widget.scaffoldKey.currentState?.openDrawer())
             : null,
-        title: const Text('Menu Settings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: Text('Menu Settings (${state.menu.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -5957,8 +5988,8 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                             final confirm = await showDialog<bool>(
                               context: context,
                               builder: (context) => AlertDialog(
-                                title: const Text('Reset & Sync Menu'),
-                                content: const Text('This will reset your menu items to the rate card defaults and sync them to the cloud. Custom items will be overwritten. Do you want to proceed?'),
+                                title: const Text('Factory Reset Menu (318 Items)'),
+                                content: const Text('This will reset your menu items to the original 318 default items and push them to the cloud. Custom items added by staff will be overwritten. Do you want to proceed?'),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(context, false),
@@ -5966,7 +5997,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                                   ),
                                   TextButton(
                                     onPressed: () => Navigator.pop(context, true),
-                                    child: const Text('Reset & Sync', style: TextStyle(color: Color(0xFFF97316))),
+                                    child: const Text('Factory Reset', style: TextStyle(color: Color(0xFFF97316))),
                                   ),
                                 ],
                               ),
@@ -5979,7 +6010,7 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                             }
                           },
                           icon: const Icon(Icons.sync, size: 16),
-                          label: const Text('Reset & Sync defaults', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: const Text('Factory Reset Menu (318 Items)', style: TextStyle(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1E293B),
                             foregroundColor: Colors.white,
@@ -6089,7 +6120,28 @@ class _MenuSettingsViewState extends State<MenuSettingsView> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
-                            onPressed: () => state.deleteMenuItem(item.id),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Confirm Delete'),
+                                  content: Text('Are you sure you want to delete ${item.name}?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        state.deleteMenuItem(item.id);
+                                        Navigator.pop(ctx);
+                                      },
+                                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                             tooltip: 'Delete Item',
                           ),
                         ],
@@ -6512,6 +6564,21 @@ class _NewItemScreenState extends State<NewItemScreen> {
       return;
     }
 
+    final isDuplicate = state.menu.any((item) =>
+        item.name.trim().toLowerCase() == name.toLowerCase() &&
+        item.price == price &&
+        item.category.trim().toLowerCase() == _categoryVal.trim().toLowerCase());
+
+    if (isDuplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: An item with the same Name, Price, and Category already exists!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     state.addMenuItem(
       name: name,
       price: price,
@@ -6923,6 +6990,22 @@ class _EditItemScreenState extends State<EditItemScreen> {
       return;
     }
 
+    final isDuplicate = state.menu.any((item) =>
+        item.id != widget.item.id &&
+        item.name.trim().toLowerCase() == name.toLowerCase() &&
+        item.price == price &&
+        item.category.trim().toLowerCase() == _categoryVal.trim().toLowerCase());
+
+    if (isDuplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: An item with the same Name, Price, and Category already exists!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     state.updateMenuItem(
       id: widget.item.id,
       name: name,
@@ -7020,7 +7103,28 @@ class CategorySettingsView extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 12),
                                 IconButton(
-                                  onPressed: () => state.deleteCategory(cat.name),
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Confirm Delete'),
+                                        content: Text('Are you sure you want to delete category "${cat.name}"?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () {
+                                              state.deleteCategory(cat.name);
+                                              Navigator.pop(ctx);
+                                            },
+                                            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                   icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
                                   tooltip: 'Delete Category',
                                 ),
@@ -7282,6 +7386,65 @@ class _StoreSettingsViewState extends State<StoreSettingsView> {
                     style: TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8), height: 1.4),
                   ),
                   const SizedBox(height: 20),
+                  const Text('Store Logo', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF12161B),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0x1AFFFFFF)),
+                        ),
+                        clipBehavior: Clip.hardEdge,
+                        child: state.storeLogoBase64.isNotEmpty
+                            ? Image.memory(base64Decode(state.storeLogoBase64), fit: BoxFit.cover, errorBuilder: (ctx, _, __) => const Icon(Icons.broken_image))
+                            : const Icon(Icons.storefront, size: 40, color: Colors.white24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                try {
+                                  final ImagePicker picker = ImagePicker();
+                                  final XFile? image = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 70);
+                                  if (image != null) {
+                                    final bytes = await image.readAsBytes();
+                                    final b64 = base64Encode(bytes);
+                                    state.setStoreLogo(b64);
+                                  }
+                                } catch (e) {
+                                  debugPrint('Error picking image: $e');
+                                }
+                              },
+                              icon: const Icon(Icons.upload_file, size: 18),
+                              label: const Text('Upload Logo'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2C313C),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                            if (state.storeLogoBase64.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: () {
+                                  state.setStoreLogo('');
+                                },
+                                icon: const Icon(Icons.delete, size: 18, color: Colors.redAccent),
+                                label: const Text('Remove Logo', style: TextStyle(color: Colors.redAccent)),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   TextField(
                     controller: nameController,
                     decoration: InputDecoration(labelText: 'Restaurant Display Name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
@@ -10470,11 +10633,105 @@ String formatKOTText(String storeName, String tableId, List<dynamic> items, int 
   return lines.join('\n');
 }
 
-List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rollWidth) {
+List<int> getLogoEscPosBytes(String? base64String) {
+  if (base64String == null || base64String.isEmpty) return [];
+  try {
+    final imageBytes = base64Decode(base64String.split(',').last);
+    final decodedImage = img.decodeImage(imageBytes);
+    if (decodedImage == null) return [];
+
+    // Step 1: Flatten transparency onto white & convert to grayscale
+    final int origW = decodedImage.width;
+    final int origH = decodedImage.height;
+    img.Image grayscale = img.Image(width: origW, height: origH);
+    for (int y = 0; y < origH; y++) {
+      for (int x = 0; x < origW; x++) {
+        final pixel = decodedImage.getPixel(x, y);
+        double a = pixel.a.toDouble() / 255.0;
+        double r = (pixel.r * a) + (255 * (1 - a));
+        double g = (pixel.g * a) + (255 * (1 - a));
+        double b = (pixel.b * a) + (255 * (1 - a));
+        int lum = (0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0, 255);
+        grayscale.setPixelRgba(x, y, lum, lum, lum, 255);
+      }
+    }
+
+    // Step 2: Resize to 320 dots (proven working size)
+    final int targetWidth = 320;
+    img.Image resized = grayscale;
+    if (grayscale.width != targetWidth) {
+      resized = img.copyResize(grayscale, width: targetWidth, interpolation: img.Interpolation.cubic);
+    }
+
+    // Step 3: Align width to 8-pixel boundary
+    int width = (resized.width ~/ 8) * 8;
+    if (width != resized.width) {
+      resized = img.copyCrop(resized, x: 0, y: 0, width: width, height: resized.height);
+    }
+    final int height = resized.height;
+    final int widthBytes = width ~/ 8; // 40
+
+    // Step 4: Convert to B&W - threshold 128 for crisp, high-contrast logos
+    const int threshold = 128;
+    List<List<bool>> blackPixels = List.generate(height, (y) {
+      return List.generate(width, (x) {
+        return resized.getPixel(x, y).r.toInt() < threshold;
+      });
+    });
+
+    // Step 5: Build ESC/POS using GS v 0 with small vertical chunks
+    int maxDots = 384;
+    int leftPaddingBytes = ((maxDots - width) ~/ 2) ~/ 8; // 4
+    int totalWidthBytes = leftPaddingBytes + widthBytes;   // 44
+
+    List<int> cmd = [];
+    cmd.addAll([0x1B, 0x61, 0]); // Left align
+
+    const int chunkHeight = 24;
+    for (int startY = 0; startY < height; startY += chunkHeight) {
+      int thisChunkH = (startY + chunkHeight > height) ? (height - startY) : chunkHeight;
+
+      cmd.addAll([0x1D, 0x76, 0x30, 0]); // GS v 0
+      cmd.add(totalWidthBytes % 256);     // xL (44)
+      cmd.add(totalWidthBytes ~/ 256);    // xH (0)
+      cmd.add(thisChunkH % 256);          // yL
+      cmd.add(thisChunkH ~/ 256);         // yH
+
+      for (int y = startY; y < startY + thisChunkH; y++) {
+        for (int p = 0; p < leftPaddingBytes; p++) {
+          cmd.add(0); // left margin padding
+        }
+        for (int x = 0; x < widthBytes; x++) {
+          int byte = 0;
+          for (int bit = 0; bit < 8; bit++) {
+            int px = x * 8 + bit;
+            if (px < width && blackPixels[y][px]) {
+              byte |= (1 << (7 - bit));
+            }
+          }
+          cmd.add(byte);
+        }
+      }
+    }
+
+    cmd.addAll([0x1B, 0x61, 0]); // Left align for receipt text
+    return cmd;
+  } catch (e) {
+    debugPrint('Error generating logo ESC/POS: $e');
+    return [];
+  }
+}
+
+List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rollWidth, String storeLogoBase64) {
   final List<int> bytes = [];
   
   // ESC @ (Initialize printer)
   bytes.addAll([27, 64]);
+  
+  // Print Logo if available
+  if (storeLogoBase64.isNotEmpty) {
+    bytes.addAll(getLogoEscPosBytes(storeLogoBase64));
+  }
   
   // ESC M 0 (Select Font A - larger default font instead of tiny Font B)
   bytes.addAll([27, 77, 0]);
@@ -10483,6 +10740,7 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rol
   String printableText = invoiceText.replaceAll('₹', 'Rs.');
   
   final lines = printableText.split('\n');
+  bool inItemsSection = false;
   for (var line in lines) {
     String trimmed = line.trim();
     if (trimmed.isEmpty) {
@@ -10494,27 +10752,28 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rol
     bool isDivider = trimmed.replaceAll('=', '').isEmpty || trimmed.replaceAll('-', '').isEmpty;
     
     if (isDivider) {
+      inItemsSection = false;
       bytes.addAll([27, 97, 0]); // Left align
       bytes.addAll([29, 33, 0]); // Normal size
-      bytes.addAll([27, 69, 0]); // Bold OFF
+      bytes.addAll([27, 69, 0, 27, 71, 0]); // Bold OFF, Double Strike OFF
       bytes.addAll(utf8.encode(line + '\n'));
     } 
     // Check if line is the store name
     else if (trimmed.toLowerCase() == storeName.toLowerCase() || line.trim() == storeName.trim()) {
       bytes.addAll([27, 97, 1]); // Center align
       bytes.addAll([29, 33, 17]); // Double size (width & height)
-      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll([27, 69, 1, 27, 71, 1]); // Bold ON, Double Strike ON
       bytes.addAll(utf8.encode(trimmed + '\n'));
       // Reset
       bytes.addAll([29, 33, 0]); // Normal size
-      bytes.addAll([27, 69, 0]); // Bold OFF
+      bytes.addAll([27, 69, 0, 27, 71, 0]); // Bold OFF, Double Strike OFF
       bytes.addAll([27, 97, 0]); // Left align
     } 
     // Check if line is a KOT header
     else if (trimmed == "KITCHEN ORDER" || trimmed == "(KOT)" || trimmed == "KITCHEN ORDER (KOT)") {
       bytes.addAll([27, 97, 1]); // Center align
       bytes.addAll([29, 33, 17]); // Double size (width & height)
-      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll([27, 69, 1, 27, 71, 1]); // Bold ON, Double Strike ON
       bytes.addAll(utf8.encode(trimmed + '\n'));
       // Reset
       bytes.addAll([29, 33, 0]);
@@ -10525,7 +10784,7 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rol
     else if (trimmed.contains("Thank You!")) {
       bytes.addAll([27, 97, 1]); // Center align
       bytes.addAll([29, 33, 1]); // Double height (medium size)
-      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll([27, 69, 1, 27, 71, 1]); // Bold ON, Double Strike ON
       bytes.addAll(utf8.encode(trimmed + '\n'));
       // Reset
       bytes.addAll([29, 33, 0]);
@@ -10537,9 +10796,9 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rol
       bytes.addAll([27, 97, 1]); // Center align
       bytes.addAll([29, 33, 0]); // Normal size
       if (trimmed.startsWith('GSTIN:') || trimmed.startsWith('Table/Type:') || trimmed.startsWith('Table/Parcel:')) {
-        bytes.addAll([27, 69, 1]); // Bold ON
+        bytes.addAll([27, 69, 1, 27, 71, 1]); // Bold ON, Double Strike ON
       } else {
-        bytes.addAll([27, 69, 0]); // Bold OFF
+        bytes.addAll([27, 69, 0, 27, 71, 0]); // Bold OFF, Double Strike OFF
       }
       bytes.addAll(utf8.encode(trimmed + '\n'));
       // Reset
@@ -10550,17 +10809,26 @@ List<int> getEscPosBytesForReceipt(String invoiceText, String storeName, int rol
     else if (trimmed.startsWith("GRAND TOTAL:")) {
       bytes.addAll([27, 97, 0]); // Left align
       bytes.addAll([29, 33, 1]); // Double height
-      bytes.addAll([27, 69, 1]); // Bold ON
+      bytes.addAll([27, 69, 1, 27, 71, 1]); // Bold ON, Double Strike ON
       bytes.addAll(utf8.encode(line + '\n'));
       // Reset
       bytes.addAll([29, 33, 0]);
       bytes.addAll([27, 69, 0]);
     }
+    // Check if it starts the ITEMS section
+    else if (trimmed == "ITEMS:") {
+      inItemsSection = true;
+      bytes.addAll([27, 97, 0]); // Left align
+      bytes.addAll([29, 33, 0]); // Normal size
+      bytes.addAll([27, 69, 1, 27, 71, 1]); // Bold ON, Double Strike ON
+      bytes.addAll(utf8.encode(line + '\n'));
+    }
     // Standard lines
     else {
       bytes.addAll([27, 97, 0]); // Left align
       bytes.addAll([29, 33, 0]); // Normal size
-      bytes.addAll([27, 69, 0]); // Bold OFF
+      bytes.addAll([27, 69, inItemsSection ? 1 : 0]); // Bold
+      bytes.addAll([27, 71, inItemsSection ? 1 : 0]); // Double strike
       bytes.addAll(utf8.encode(line + '\n'));
     }
   }
@@ -10796,7 +11064,7 @@ String formatSalesReportText({
     
     // Sort oldest first for log
     final sorted = List<InvoiceModel>.from(invoices);
-    sorted.sort((a, b) => a.parsedDateTime.compareTo(b.parsedDateTime));
+    sorted.sort(compareInvoicesAscending);
     
     int totalLogSub = 0;
     int totalLogGst = 0;
@@ -10880,7 +11148,7 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
         final socket = await Socket.connect(state.printerIpAddress, 9100, timeout: const Duration(seconds: 5));
         
         // Generate beautiful ESC/POS bytes
-        final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName, state.rollWidth);
+        final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName, state.rollWidth, state.storeLogoBase64);
         
         socket.add(bytes);
         
@@ -10929,9 +11197,40 @@ Future<bool> executeReceiptPrint(String invoiceText, AppState state) async {
           }
 
           // Generate beautiful ESC/POS bytes
-          final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName, state.rollWidth);
+          final bytes = getEscPosBytesForReceipt(invoiceText, state.storeName, state.rollWidth, state.storeLogoBase64);
           
-          final bool result = await PrintBluetoothThermal.writeBytes(bytes);
+          bool result = true;
+          // Send in chunks, but ensure we split AT a newline (byte 10) so the printer doesn't flush halfway through a line!
+          final int maxChunkSize = 300;
+          int i = 0;
+          while (i < bytes.length) {
+            int end = i + maxChunkSize;
+            if (end >= bytes.length) {
+              end = bytes.length;
+            } else {
+              // Find the last newline character before the end limit
+              int lastNewline = -1;
+              for (int j = end - 1; j >= i; j--) {
+                if (bytes[j] == 10) { // 10 is '\n'
+                  lastNewline = j;
+                  break;
+                }
+              }
+              // If we found a newline, split right after it. Otherwise, force split at maxChunkSize.
+              if (lastNewline != -1) {
+                end = lastNewline + 1;
+              }
+            }
+            
+            final chunkResult = await PrintBluetoothThermal.writeBytes(bytes.sublist(i, end));
+            if (!chunkResult) {
+               result = false;
+               break;
+            }
+            i = end;
+            // Small delay to let the printer process the line buffer
+            await Future.delayed(const Duration(milliseconds: 40));
+          }
 
           if (result) {
             // Sync state: printing succeeded, so we are definitely connected
@@ -11165,14 +11464,78 @@ class BluetoothLogsView extends StatelessWidget {
                       icon: const Icon(Icons.cloud_upload, size: 16, color: Colors.white),
                       label: const Text('Backup Data', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       onPressed: () async {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Uploading local database backup to cloud...')),
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) {
+                            return StatefulBuilder(
+                              builder: (context, setState) {
+                                return AlertDialog(
+                                  title: const Text('Uploading Backup to Cloud...', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  content: Row(
+                                    children: [
+                                      const CircularProgressIndicator(color: Color(0xFFFF6F24)),
+                                      const SizedBox(width: 20),
+                                      Expanded(
+                                        child: ListenableBuilder(
+                                          listenable: state,
+                                          builder: (context, child) {
+                                            return Text(
+                                              '${state.syncProgressMessage}\n\nPlease wait. Do not close the app.',
+                                              style: const TextStyle(fontSize: 14),
+                                            );
+                                          }
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            );
+                          }
                         );
-                        await state.pushLocalDataToCloud();
+                        
+                        final errorStr = await state.pushLocalDataToCloud();
+                        
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Backup complete! Data saved to Firestore.')),
-                          );
+                          Navigator.pop(context); // Close the loading dialog
+                          
+                          if (errorStr != null) {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Upload Failed ❌', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                content: Text('Error: $errorStr\n\nPlease check your internet connection and try again.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          } else {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Backup Complete! ✅', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                content: Text(
+                                  'Successfully saved to Cloud:\n\n'
+                                  '✅ ${state.invoices.length} Bills\n'
+                                  '✅ ${state.tables.length} Tables\n'
+                                  '✅ ${state.menu.length} Menu Items\n'
+                                  '✅ ${state.categories.length} Categories',
+                                  style: const TextStyle(fontSize: 16, height: 1.5),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -11667,6 +12030,9 @@ class _SecretLedgerViewState extends State<SecretLedgerView> {
   DateTime _selectedDate = DateTime.now();
   DateTime _customDate = DateTime.now();
   final _targetTotalController = TextEditingController();
+  
+  int _stealthTapCount = 0;
+  bool _showRealData = false;
 
   Future<void> _selectDate(BuildContext context) async {
     final picked = await showDatePicker(
@@ -11753,8 +12119,8 @@ class _SecretLedgerViewState extends State<SecretLedgerView> {
     final state = AppStateProvider.of(context);
     final dayInvoices = _getInvoicesForDate(state.invoices, _selectedDate);
     final dayTotal = dayInvoices.fold(0, (sum, inv) => sum + inv.total);
-    final dayOriginalTotal = dayInvoices.fold(0, (sum, inv) => sum + (inv.originalTotal ?? inv.total));
-    final dayDifference = dayOriginalTotal - dayTotal;
+    final dayDifference = state.getGhostDelta(_selectedDate);
+    final dayOriginalTotal = dayTotal + dayDifference;
     final dateStr = "${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}";
 
     return Scaffold(
@@ -11852,35 +12218,50 @@ class _SecretLedgerViewState extends State<SecretLedgerView> {
                         ),
                       ),
                       Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
+                      if (_showRealData) ...[
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('Original Sales', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+                              const SizedBox(height: 4),
+                              Text('₹$dayOriginalTotal', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+                            ],
+                          ),
+                        ),
+                        Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
+                      ],
                       Expanded(
-                        child: Column(
-                          children: [
-                            const Text('Original Sales', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
-                            const SizedBox(height: 4),
-                            Text('₹$dayOriginalTotal', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
-                          ],
+                        child: GestureDetector(
+                          onTap: () {
+                            _stealthTapCount++;
+                            if (_stealthTapCount >= 3) {
+                              setState(() {
+                                _showRealData = !_showRealData;
+                                _stealthTapCount = 0;
+                              });
+                            }
+                          },
+                          child: Column(
+                            children: [
+                              const Text('Total Sales', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+                              const SizedBox(height: 4),
+                              Text('₹$dayTotal', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFFFF6F24))),
+                            ],
+                          ),
                         ),
                       ),
-                      Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            const Text('Display Sales', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
-                            const SizedBox(height: 4),
-                            Text('₹$dayTotal', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFFF6F24))),
-                          ],
+                      if (_showRealData) ...[
+                        Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('Difference', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+                              const SizedBox(height: 4),
+                              Text('₹$dayDifference', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF10B981))),
+                            ],
+                          ),
                         ),
-                      ),
-                      Container(width: 1, height: 24, color: const Color(0x1AFFFFFF)),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            const Text('Difference', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
-                            const SizedBox(height: 4),
-                            Text('₹$dayDifference', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
-                          ],
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -12218,6 +12599,8 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
   late int _packaging;
   late double _discountPercent;
   final _scaleController = TextEditingController();
+  late final TextEditingController _packagingController;
+  late final TextEditingController _discountController;
 
   @override
   void initState() {
@@ -12232,11 +12615,15 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
     )).toList();
     _packaging = widget.invoice.packaging;
     _discountPercent = widget.invoice.discountPercent;
+    _packagingController = TextEditingController(text: '$_packaging');
+    _discountController = TextEditingController(text: '$_discountPercent');
   }
 
   @override
   void dispose() {
     _scaleController.dispose();
+    _packagingController.dispose();
+    _discountController.dispose();
     super.dispose();
   }
 
@@ -12665,7 +13052,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                   fillColor: const Color(0x0CFFFFFF),
                   filled: true,
                 ),
-                controller: TextEditingController(text: '$_packaging')..selection = TextSelection.fromPosition(TextPosition(offset: '$_packaging'.length)),
+                controller: _packagingController,
                 onChanged: (val) {
                   final parsed = int.tryParse(val.trim());
                   if (parsed != null && parsed >= 0) {
@@ -12687,7 +13074,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                   fillColor: const Color(0x0CFFFFFF),
                   filled: true,
                 ),
-                controller: TextEditingController(text: '$_discountPercent')..selection = TextSelection.fromPosition(TextPosition(offset: '$_discountPercent'.length)),
+                controller: _discountController,
                 onChanged: (val) {
                   final parsed = double.tryParse(val.trim());
                   if (parsed != null && parsed >= 0 && parsed <= 100) {
@@ -12768,125 +13155,121 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
           ),
         ),
       ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       actions: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton.icon(
-              onPressed: () {
-                if (widget.state.invoices.isNotEmpty && widget.state.invoices.first.id != widget.invoice.id) {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      backgroundColor: const Color(0xFF12161B),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: Color(0x0CFFFFFF)),
-                      ),
-                      title: const Text('Delete Blocked', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.amber)),
-                      content: const Text(
-                        'You can only delete the most recent bill (the last one generated) to prevent gaps in billing numbers.',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('OK', style: TextStyle(color: Color(0xFFFF6F24))),
-                        ),
-                      ],
+        TextButton.icon(
+          onPressed: () {
+            if (widget.state.invoices.isNotEmpty && widget.state.invoices.first.id != widget.invoice.id) {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: const Color(0xFF12161B),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: Color(0x0CFFFFFF)),
+                  ),
+                  title: const Text('Delete Blocked', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.amber)),
+                  content: const Text(
+                    'You can only delete the most recent bill (the last one generated) to prevent gaps in billing numbers.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('OK', style: TextStyle(color: Color(0xFFFF6F24))),
                     ),
-                  );
-                  return;
-                }
+                  ],
+                ),
+              );
+              return;
+            }
 
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: const Color(0xFF12161B),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: Color(0x0CFFFFFF)),
-                    ),
-                    title: const Text('Delete Invoice', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
-                    content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? This will permanently delete this record and reset the sequence number count.', style: const TextStyle(fontSize: 13)),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(ctx); // pop confirmation
-                          Navigator.pop(context); // pop edit dialog
-                          final success = widget.state.deleteInvoice(widget.invoice.id);
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Invoice ${widget.invoice.id} deleted successfully.'),
-                                backgroundColor: Colors.redAccent,
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Error: Could not delete invoice.'),
-                                backgroundColor: Colors.redAccent,
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                        child: const Text('Delete'),
-                      ),
-                    ],
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: const Color(0xFF12161B),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0x0CFFFFFF)),
+                ),
+                title: const Text('Delete Invoice', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
+                content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? This will permanently delete this record and reset the sequence number count.', style: const TextStyle(fontSize: 13)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
                   ),
-                );
-              },
-              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
-              label: const Text('Delete Bill', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx); // pop confirmation
+                      Navigator.pop(context); // pop edit dialog
+                      final success = widget.state.deleteInvoice(widget.invoice.id);
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Invoice ${widget.invoice.id} deleted successfully.'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Error: Could not delete invoice.'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            );
+          },
+          icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+          label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _items.isEmpty
-                      ? null
-                      : () {
-                          final updatedInv = InvoiceModel(
-                            id: widget.invoice.id,
-                            tableId: widget.invoice.tableId,
-                            dateTime: widget.invoice.dateTime,
-                            checkInTime: widget.invoice.checkInTime,
-                            items: _items,
-                            subtotal: _subtotal,
-                            gst: _gst,
-                            packaging: _packaging,
-                            total: _total,
-                            originalTotal: widget.invoice.originalTotal ?? widget.invoice.total,
-                            discountPercent: _discountPercent,
-                          );
-                          widget.state.updateInvoice(updatedInv);
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Invoice ${widget.invoice.id} updated manually.'),
-                              backgroundColor: const Color(0xFF00AA4F),
-                            ),
-                          );
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF6F24),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: const Text('Save Changes'),
-                ),
-              ],
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _items.isEmpty
+                  ? null
+                  : () {
+                      final updatedInv = InvoiceModel(
+                        id: widget.invoice.id,
+                        tableId: widget.invoice.tableId,
+                        dateTime: widget.invoice.dateTime,
+                        checkInTime: widget.invoice.checkInTime,
+                        items: _items,
+                        subtotal: _subtotal,
+                        gst: _gst,
+                        packaging: _packaging,
+                        total: _total,
+                        discountPercent: _discountPercent,
+                      );
+                      widget.state.updateInvoice(updatedInv);
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Invoice ${widget.invoice.id} updated manually.'),
+                          backgroundColor: const Color(0xFF00AA4F),
+                        ),
+                      );
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6F24),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Save'),
             ),
           ],
         ),

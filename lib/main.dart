@@ -3358,6 +3358,8 @@ class ReceiptPopupOverlay extends StatelessWidget {
       total: invoice.total,
       discountPercent: invoice.discountPercent,
       invoiceId: invoice.id,
+      customerName: invoice.customerName,
+      customerContact: invoice.customerContact,
     );
 
     return GestureDetector(
@@ -3384,6 +3386,16 @@ class ReceiptPopupOverlay extends StatelessWidget {
                       const Text('Invoice Bill Receipt', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       Row(
                         children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_note, color: Color(0xFFFF6F24), size: 22),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => SecretInvoiceEditDialog(state: state, invoice: invoice),
+                              );
+                            },
+                            tooltip: 'Edit Bill & Customer Info',
+                          ),
                           IconButton(
                             icon: const Icon(Icons.share, color: Color(0xFFFF6F24), size: 20),
                             onPressed: () async {
@@ -3512,6 +3524,7 @@ class InvoicesListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
+    final isMobile = MediaQuery.of(context).size.width <= 768;
 
     return Scaffold(
       appBar: AppBar(
@@ -3532,14 +3545,18 @@ class InvoicesListView extends StatelessWidget {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 12 : 24),
         child: Container(
-          decoration: BoxDecoration(color: const Color(0x7F191E28), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x0CFFFFFF))),
+          decoration: BoxDecoration(
+            color: const Color(0x7F191E28),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0x0CFFFFFF)),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -3574,18 +3591,27 @@ class InvoicesListView extends StatelessWidget {
                     ? const Center(child: Text('No past invoices found matching the filter.', style: TextStyle(color: Color(0xFF94A3B8))))
                     : NotificationListener<ScrollNotification>(
                         onNotification: (ScrollNotification scrollInfo) {
-                          if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
+                          if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 300) {
                             state.loadMoreInvoices();
                           }
                           return false;
                         },
                         child: ListView.builder(
-                          itemCount: state.filteredInvoices.length,
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: state.filteredInvoices.length + (state.isLoadingMoreInvoices ? 1 : 0),
                           itemBuilder: (context, idx) {
+                            if (idx == state.filteredInvoices.length) {
+                              return const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Center(child: CircularProgressIndicator(color: Color(0xFF10B981))),
+                              );
+                            }
                             final inv = state.filteredInvoices[idx];
                             return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                               title: Text(inv.id, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontFamily: 'monospace')),
-                              subtitle: Text('Table: ${inv.tableId} • ${inv.dateTime}', style: const TextStyle(color: Color(0xFF94A3B8))),
+                              subtitle: Text('Table: ${inv.tableId} • ${inv.dateTime}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -4313,6 +4339,10 @@ Future<void> generateAndShareSingleInvoicePdf(InvoiceModel invoice, String store
           pw.Divider(thickness: .5, color: PdfColors.grey500),
           pw.SizedBox(height: 4),
           pw.Text('Bill No: ${invoice.id}', style: const pw.TextStyle(fontSize: 7.5)),
+          if (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty)
+            pw.Text('Customer: ${invoice.customerName!.trim()}', style: const pw.TextStyle(fontSize: 7.5)),
+          if (invoice.customerContact != null && invoice.customerContact!.trim().isNotEmpty)
+            pw.Text('Contact: ${invoice.customerContact!.trim()}', style: const pw.TextStyle(fontSize: 7.5)),
           pw.Text('Date: ${invoice.dateTime}', style: const pw.TextStyle(fontSize: 7.5)),
           pw.Text('Table/Parcel: ${invoice.tableId}', style: const pw.TextStyle(fontSize: 7.5)),
           if (invoice.checkInTime != null)
@@ -6183,7 +6213,7 @@ class _NewItemScreenState extends State<NewItemScreen> {
   final _priceController = TextEditingController();
   final _customGstController = TextEditingController();
   bool _isCustomGst = false;
-  String _categoryVal = 'SANDWICH';
+  String _categoryVal = '';
   bool _isVeg = true;
   int _gstRate = 5;
 
@@ -6197,6 +6227,9 @@ class _NewItemScreenState extends State<NewItemScreen> {
         _isCustomGst = _gstRate != 0 && _gstRate != 5 && _gstRate != 12 && _gstRate != 18 && _gstRate != 28;
         if (_isCustomGst) {
           _customGstController.text = _gstRate.toString();
+        }
+        if (state.categoriesList.isNotEmpty) {
+          _categoryVal = state.categoriesList.first;
         }
       });
     });
@@ -6283,8 +6316,8 @@ class _NewItemScreenState extends State<NewItemScreen> {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFFFF6F24)),
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _categoryVal,
+                 DropdownButtonFormField<String>(
+                  value: state.categoriesList.contains(_categoryVal) ? _categoryVal : (state.categoriesList.isNotEmpty ? state.categoriesList.first : null),
                   dropdownColor: const Color(0xFF12161B),
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -6551,6 +6584,13 @@ class _NewItemScreenState extends State<NewItemScreen> {
     final price = int.tryParse(_priceController.text) ?? 0;
     final serial = int.tryParse(_serialController.text) ?? 0;
 
+    if (state.categoriesList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one category under Category Settings first.')),
+      );
+      return;
+    }
+
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter an item name')),
@@ -6564,10 +6604,12 @@ class _NewItemScreenState extends State<NewItemScreen> {
       return;
     }
 
+    final categoryToUse = state.categoriesList.contains(_categoryVal) ? _categoryVal : state.categoriesList.first;
+
     final isDuplicate = state.menu.any((item) =>
         item.name.trim().toLowerCase() == name.toLowerCase() &&
         item.price == price &&
-        item.category.trim().toLowerCase() == _categoryVal.trim().toLowerCase());
+        item.category.trim().toLowerCase() == categoryToUse.trim().toLowerCase());
 
     if (isDuplicate) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6582,7 +6624,7 @@ class _NewItemScreenState extends State<NewItemScreen> {
     state.addMenuItem(
       name: name,
       price: price,
-      category: _categoryVal,
+      category: categoryToUse,
       serialNumber: serial,
       isVeg: _isVeg,
       gstRate: _gstRate,
@@ -6609,7 +6651,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   final _priceController = TextEditingController();
   final _customGstController = TextEditingController();
   bool _isCustomGst = false;
-  String _categoryVal = 'SANDWICH';
+  String _categoryVal = '';
   bool _isVeg = true;
   int _gstRate = 5;
 
@@ -6626,6 +6668,18 @@ class _EditItemScreenState extends State<EditItemScreen> {
     if (_isCustomGst) {
       _customGstController.text = _gstRate.toString();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = AppStateProvider.of(context);
+      if (!state.categoriesList.contains(_categoryVal)) {
+        setState(() {
+          if (state.categoriesList.isNotEmpty) {
+            _categoryVal = state.categoriesList.first;
+          } else {
+            _categoryVal = '';
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -6709,8 +6763,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFFFF6F24)),
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _categoryVal,
+                 DropdownButtonFormField<String>(
+                  value: state.categoriesList.contains(_categoryVal) ? _categoryVal : (state.categoriesList.isNotEmpty ? state.categoriesList.first : null),
                   dropdownColor: const Color(0xFF12161B),
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -6977,6 +7031,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
     final price = int.tryParse(_priceController.text) ?? 0;
     final serial = int.tryParse(_serialController.text) ?? 0;
 
+    if (state.categoriesList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one category under Category Settings first.')),
+      );
+      return;
+    }
+
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter an item name')),
@@ -6990,11 +7051,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
       return;
     }
 
+    final categoryToUse = state.categoriesList.contains(_categoryVal) ? _categoryVal : state.categoriesList.first;
+
     final isDuplicate = state.menu.any((item) =>
         item.id != widget.item.id &&
         item.name.trim().toLowerCase() == name.toLowerCase() &&
         item.price == price &&
-        item.category.trim().toLowerCase() == _categoryVal.trim().toLowerCase());
+        item.category.trim().toLowerCase() == categoryToUse.trim().toLowerCase());
 
     if (isDuplicate) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -7010,7 +7073,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
       id: widget.item.id,
       name: name,
       price: price,
-      category: _categoryVal,
+      category: categoryToUse,
       serialNumber: serial,
       isVeg: _isVeg,
       gstRate: _gstRate,
@@ -9907,7 +9970,7 @@ class _CashierLockOverlayState extends State<CashierLockOverlay> {
     }
 
     // Save settings for selected user
-    widget.state.updateCashierSettings(_selectedUser!.name, newPin, widget.state.openingFloat);
+    widget.state.updateCashierSettings(_selectedUser!.name, newPin, widget.state.openingFloat, bypassRoleCheck: true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('PIN successfully reset for ${_selectedUser!.name}! Login with your new PIN.')),
     );
@@ -10049,7 +10112,7 @@ class _CashierLockOverlayState extends State<CashierLockOverlay> {
         ),
         const SizedBox(height: 16),
         DropdownButtonFormField<UserProfile>(
-          value: _selectedUser,
+          value: widget.state.users.contains(_selectedUser) ? _selectedUser : null,
           dropdownColor: const Color(0xFF12161B),
           decoration: InputDecoration(
             labelText: 'Select Profile',
@@ -10888,6 +10951,8 @@ String formatReceiptText({
   required int total,
   required double discountPercent,
   String? invoiceId,
+  String? customerName,
+  String? customerContact,
 }) {
   final int width = state.rollWidth == 3 ? 48 : 32;
   final List<String> lines = [];
@@ -10903,6 +10968,12 @@ String formatReceiptText({
 
   if (invoiceId != null) {
     lines.add("Invoice: $invoiceId");
+  }
+  if (customerName != null && customerName.trim().isNotEmpty) {
+    lines.add("Customer: ${customerName.trim()}");
+  }
+  if (customerContact != null && customerContact.trim().isNotEmpty) {
+    lines.add("Contact:  ${customerContact.trim()}");
   }
   lines.add("Table/Parcel: ${tableId ?? ''}");
   if (checkInTime != null) {
@@ -12598,9 +12669,13 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
   late List<CartItem> _items;
   late int _packaging;
   late double _discountPercent;
+  late String _dateTimeStr;
+  late bool _applyGst;
   final _scaleController = TextEditingController();
   late final TextEditingController _packagingController;
   late final TextEditingController _discountController;
+  late final TextEditingController _customerNameController;
+  late final TextEditingController _customerContactController;
 
   @override
   void initState() {
@@ -12615,8 +12690,12 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
     )).toList();
     _packaging = widget.invoice.packaging;
     _discountPercent = widget.invoice.discountPercent;
+    _dateTimeStr = widget.invoice.dateTime;
+    _applyGst = widget.state.showGstOnBills;
     _packagingController = TextEditingController(text: '$_packaging');
     _discountController = TextEditingController(text: '$_discountPercent');
+    _customerNameController = TextEditingController(text: widget.invoice.customerName ?? '');
+    _customerContactController = TextEditingController(text: widget.invoice.customerContact ?? '');
   }
 
   @override
@@ -12624,12 +12703,14 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
     _scaleController.dispose();
     _packagingController.dispose();
     _discountController.dispose();
+    _customerNameController.dispose();
+    _customerContactController.dispose();
     super.dispose();
   }
 
   int get _subtotal {
     final discountRatio = 1.0 - (_discountPercent / 100.0);
-    if (widget.state.isGstInclusive) {
+    if (_applyGst && widget.state.showGstOnBills && widget.state.isGstInclusive) {
       return _items.fold(0, (sum, item) {
         final totalItemPrice = (item.price * item.qty * discountRatio).round();
         final gstAmount = (totalItemPrice * item.gstRate / (100 + item.gstRate)).round();
@@ -12641,6 +12722,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
   }
 
   int get _gst {
+    if (!_applyGst || !widget.state.showGstOnBills) return 0;
     final discountRatio = 1.0 - (_discountPercent / 100.0);
     if (widget.state.isGstInclusive) {
       return _items.fold(0, (sum, item) {
@@ -12897,6 +12979,10 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 500;
+    final dialogWidth = isMobile ? (screenWidth * 0.88) : 450.0;
+
     return AlertDialog(
       backgroundColor: const Color(0xFF12161B),
       shape: RoundedRectangleBorder(
@@ -12906,12 +12992,20 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.receipt_long, color: Color(0xFFFF6F24)),
-              const SizedBox(width: 10),
-              Text('Edit Invoice ${widget.invoice.id}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(Icons.receipt_long, color: Color(0xFFFF6F24)),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'Edit Invoice ${widget.invoice.id}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
           IconButton(
             onPressed: () => Navigator.pop(context),
@@ -12920,7 +13014,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
         ],
       ),
       content: SizedBox(
-        width: 450,
+        width: dialogWidth,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -13086,6 +13180,129 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
               ),
               
               const SizedBox(height: 16),
+              const Text('Customer Name (Optional - Only prints if entered)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _customerNameController,
+                decoration: InputDecoration(
+                  hintText: 'Customer Name...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  fillColor: const Color(0x0CFFFFFF),
+                  filled: true,
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              const Text('Customer Contact (Optional - Only prints if entered)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _customerContactController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  hintText: 'Customer Contact / Phone...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  fillColor: const Color(0x0CFFFFFF),
+                  filled: true,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Bill Date & Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 4),
+                        Text(_dateTimeStr, style: const TextStyle(fontSize: 12, color: Color(0xFFFF6F24), fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: widget.invoice.parsedDateTime,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (pickedDate != null && mounted) {
+                        final pickedTime = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(widget.invoice.parsedDateTime),
+                        );
+                        if (pickedTime != null && mounted) {
+                          final dt = DateTime(
+                            pickedDate.year,
+                            pickedDate.month,
+                            pickedDate.day,
+                            pickedTime.hour,
+                            pickedTime.minute,
+                          );
+                          final h = dt.hour.toString().padLeft(2, '0');
+                          final m = dt.minute.toString().padLeft(2, '0');
+                          final s = dt.second.toString().padLeft(2, '0');
+                          final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+                          setState(() {
+                            _dateTimeStr = "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}, $h:$m:$s $ampm";
+                          });
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.calendar_today, size: 14),
+                    label: const Text('Change Date', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFF6F24),
+                      side: const BorderSide(color: Color(0xFFFF6F24)),
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _applyGst ? const Color(0xFF10B981).withOpacity(0.1) : Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _applyGst ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0x0CFFFFFF)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 18,
+                          color: _applyGst ? const Color(0xFF10B981) : Colors.white60,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Add GST to Grand Total',
+                          style: TextStyle(
+                            color: _applyGst ? Colors.white : Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: _applyGst,
+                      activeColor: const Color(0xFF10B981),
+                      onChanged: (val) {
+                        setState(() {
+                          _applyGst = val;
+                        });
+                        widget.state.setShowGstOnBills(val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
               const Divider(color: Color(0x14FFFFFF)),
               const SizedBox(height: 12),
               
@@ -13119,7 +13336,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('CGST', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+                    Text(widget.state.isGstInclusive ? 'CGST (Incl.)' : 'CGST', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
                     Text('₹${(_gst / 2.0).toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 13)),
                   ],
                 ),
@@ -13127,7 +13344,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('SGST', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+                    Text(widget.state.isGstInclusive ? 'SGST (Incl.)' : 'SGST', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
                     Text('₹${(_gst / 2.0).toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 13)),
                   ],
                 ),
@@ -13156,123 +13373,314 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
         ),
       ),
       actionsAlignment: MainAxisAlignment.spaceBetween,
-      actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      actionsPadding: EdgeInsets.symmetric(horizontal: 16, vertical: isMobile ? 8 : 12),
       actions: [
-        TextButton.icon(
-          onPressed: () {
-            if (widget.state.invoices.isNotEmpty && widget.state.invoices.first.id != widget.invoice.id) {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: const Color(0xFF12161B),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Color(0x0CFFFFFF)),
+        if (isMobile)
+          SizedBox(
+            width: dialogWidth,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _items.isEmpty
+                      ? null
+                      : () async {
+                          final updatedInv = InvoiceModel(
+                            id: widget.invoice.id,
+                            tableId: widget.invoice.tableId,
+                            dateTime: _dateTimeStr,
+                            checkInTime: widget.invoice.checkInTime,
+                            items: _items,
+                            subtotal: _subtotal,
+                            gst: _gst,
+                            packaging: _packaging,
+                            total: _total,
+                            discountPercent: _discountPercent,
+                            customerName: _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : null,
+                            customerContact: _customerContactController.text.trim().isNotEmpty ? _customerContactController.text.trim() : null,
+                          );
+                          widget.state.updateInvoice(updatedInv);
+                          widget.state.selectedReceiptInvoice = updatedInv;
+                          Navigator.pop(context);
+
+                          if (widget.state.isPrinterReady) {
+                            final receiptText = formatReceiptText(
+                              state: widget.state,
+                              tableId: updatedInv.tableId,
+                              checkInTime: updatedInv.checkInTime,
+                              checkoutTime: updatedInv.dateTime,
+                              items: updatedInv.items,
+                              subtotal: updatedInv.subtotal,
+                              gst: updatedInv.gst,
+                              packaging: updatedInv.packaging,
+                              total: updatedInv.total,
+                              discountPercent: updatedInv.discountPercent,
+                              invoiceId: updatedInv.id,
+                              customerName: updatedInv.customerName,
+                              customerContact: updatedInv.customerContact,
+                            );
+                            await executeReceiptPrint(receiptText, widget.state);
+                          }
+                        },
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('Save & Print', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  title: const Text('Delete Blocked', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.amber)),
-                  content: const Text(
-                    'You can only delete the most recent bill (the last one generated) to prevent gaps in billing numbers.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  actions: [
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _items.isEmpty
+                            ? null
+                            : () {
+                                final updatedInv = InvoiceModel(
+                                  id: widget.invoice.id,
+                                  tableId: widget.invoice.tableId,
+                                  dateTime: _dateTimeStr,
+                                  checkInTime: widget.invoice.checkInTime,
+                                  items: _items,
+                                  subtotal: _subtotal,
+                                  gst: _gst,
+                                  packaging: _packaging,
+                                  total: _total,
+                                  discountPercent: _discountPercent,
+                                  customerName: _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : null,
+                                  customerContact: _customerContactController.text.trim().isNotEmpty ? _customerContactController.text.trim() : null,
+                                );
+                                widget.state.updateInvoice(updatedInv);
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Invoice ${widget.invoice.id} updated manually.'),
+                                    backgroundColor: const Color(0xFF00AA4F),
+                                  ),
+                                );
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFF6F24),
+                          side: const BorderSide(color: Color(0xFFFF6F24)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('Save Only', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('OK', style: TextStyle(color: Color(0xFFFF6F24))),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
                     ),
                   ],
                 ),
-              );
-              return;
-            }
-
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: const Color(0xFF12161B),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: Color(0x0CFFFFFF)),
-                ),
-                title: const Text('Delete Invoice', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
-                content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? This will permanently delete this record and reset the sequence number count.', style: const TextStyle(fontSize: 13)),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-                  ),
-                  ElevatedButton(
+                const SizedBox(height: 4),
+                Center(
+                  child: TextButton.icon(
                     onPressed: () {
-                      Navigator.pop(ctx); // pop confirmation
-                      Navigator.pop(context); // pop edit dialog
-                      final success = widget.state.deleteInvoice(widget.invoice.id);
-                      if (success) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Invoice ${widget.invoice.id} deleted successfully.'),
-                            backgroundColor: Colors.redAccent,
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF12161B),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: const BorderSide(color: Color(0x0CFFFFFF)),
                           ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Error: Could not delete invoice.'),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            );
-          },
-          icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
-          label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _items.isEmpty
-                  ? null
-                  : () {
-                      final updatedInv = InvoiceModel(
-                        id: widget.invoice.id,
-                        tableId: widget.invoice.tableId,
-                        dateTime: widget.invoice.dateTime,
-                        checkInTime: widget.invoice.checkInTime,
-                        items: _items,
-                        subtotal: _subtotal,
-                        gst: _gst,
-                        packaging: _packaging,
-                        total: _total,
-                        discountPercent: _discountPercent,
-                      );
-                      widget.state.updateInvoice(updatedInv);
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Invoice ${widget.invoice.id} updated manually.'),
-                          backgroundColor: const Color(0xFF00AA4F),
+                          title: const Text('Delete Invoice', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
+                          content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? This will permanently delete this record and reset the sequence number count.', style: const TextStyle(fontSize: 13)),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(ctx); // pop confirmation
+                                Navigator.pop(context); // pop edit dialog
+                                final success = widget.state.deleteInvoice(widget.invoice.id);
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Invoice ${widget.invoice.id} deleted successfully.'),
+                                      backgroundColor: Colors.redAccent,
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Error: Could not delete invoice.'),
+                                      backgroundColor: Colors.redAccent,
+                                    ),
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                              child: const Text('Delete'),
+                            ),
+                          ],
                         ),
                       );
                     },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF6F24),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('Save'),
+                    icon: const Icon(Icons.delete_outline, size: 15, color: Colors.redAccent),
+                    label: const Text('Delete Invoice', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: const Color(0xFF12161B),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: Color(0x0CFFFFFF)),
+                      ),
+                      title: const Text('Delete Invoice', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.redAccent)),
+                      content: Text('Are you sure you want to delete Invoice ${widget.invoice.id}? This will permanently delete this record and reset the sequence number count.', style: const TextStyle(fontSize: 13)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(ctx); // pop confirmation
+                            Navigator.pop(context); // pop edit dialog
+                            final success = widget.state.deleteInvoice(widget.invoice.id);
+                            if (success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Invoice ${widget.invoice.id} deleted successfully.'),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Error: Could not delete invoice.'),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: _items.isEmpty
+                        ? null
+                        : () {
+                            final updatedInv = InvoiceModel(
+                              id: widget.invoice.id,
+                              tableId: widget.invoice.tableId,
+                              dateTime: _dateTimeStr,
+                              checkInTime: widget.invoice.checkInTime,
+                              items: _items,
+                              subtotal: _subtotal,
+                              gst: _gst,
+                              packaging: _packaging,
+                              total: _total,
+                              discountPercent: _discountPercent,
+                              customerName: _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : null,
+                              customerContact: _customerContactController.text.trim().isNotEmpty ? _customerContactController.text.trim() : null,
+                            );
+                            widget.state.updateInvoice(updatedInv);
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Invoice ${widget.invoice.id} updated manually.'),
+                                backgroundColor: const Color(0xFF00AA4F),
+                              ),
+                            );
+                          },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFF6F24),
+                      side: const BorderSide(color: Color(0xFFFF6F24)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Save Only'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _items.isEmpty
+                        ? null
+                        : () async {
+                            final updatedInv = InvoiceModel(
+                              id: widget.invoice.id,
+                              tableId: widget.invoice.tableId,
+                              dateTime: _dateTimeStr,
+                              checkInTime: widget.invoice.checkInTime,
+                              items: _items,
+                              subtotal: _subtotal,
+                              gst: _gst,
+                              packaging: _packaging,
+                              total: _total,
+                              discountPercent: _discountPercent,
+                              customerName: _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : null,
+                              customerContact: _customerContactController.text.trim().isNotEmpty ? _customerContactController.text.trim() : null,
+                            );
+                            widget.state.updateInvoice(updatedInv);
+                            widget.state.selectedReceiptInvoice = updatedInv;
+                            Navigator.pop(context);
+
+                            if (widget.state.isPrinterReady) {
+                              final receiptText = formatReceiptText(
+                                state: widget.state,
+                                tableId: updatedInv.tableId,
+                                checkInTime: updatedInv.checkInTime,
+                                checkoutTime: updatedInv.dateTime,
+                                items: updatedInv.items,
+                                subtotal: updatedInv.subtotal,
+                                gst: updatedInv.gst,
+                                packaging: updatedInv.packaging,
+                                total: updatedInv.total,
+                                discountPercent: updatedInv.discountPercent,
+                                invoiceId: updatedInv.id,
+                                customerName: updatedInv.customerName,
+                                customerContact: updatedInv.customerContact,
+                              );
+                              await executeReceiptPrint(receiptText, widget.state);
+                            }
+                          },
+                    icon: const Icon(Icons.print, size: 16),
+                    label: const Text('Save & Print'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
       ],
     );
   }

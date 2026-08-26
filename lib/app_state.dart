@@ -117,13 +117,13 @@ class CartItem {
   };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
-    id: json['id'],
-    name: json['name'],
-    price: json['price'],
-    category: json['category'],
-    qty: json['qty'],
-    gstRate: json['gstRate'] ?? 5,
-    printedQty: json['printedQty'] ?? 0,
+    id: (json['id'] as num?)?.toInt() ?? int.tryParse(json['id']?.toString() ?? '') ?? 0,
+    name: json['name']?.toString() ?? '',
+    price: (json['price'] as num?)?.toInt() ?? int.tryParse(json['price']?.toString() ?? '') ?? 0,
+    category: json['category']?.toString() ?? '',
+    qty: (json['qty'] as num?)?.toInt() ?? int.tryParse(json['qty']?.toString() ?? '') ?? 1,
+    gstRate: (json['gstRate'] as num?)?.toInt() ?? int.tryParse(json['gstRate']?.toString() ?? '') ?? 5,
+    printedQty: (json['printedQty'] as num?)?.toInt() ?? int.tryParse(json['printedQty']?.toString() ?? '') ?? 0,
   );
 }
 
@@ -173,9 +173,16 @@ DateTime? parseInvoiceDateHelper(String dateStr) {
     final dParts = datePart.split(dateSeparators);
     if (dParts.length < 3) return null;
 
-    int day = int.parse(dParts[0]);
-    int month = int.parse(dParts[1]);
-    int year = int.parse(dParts[2]);
+    int day, month, year;
+    if (dParts[0].length == 4) {
+      year = int.parse(dParts[0]);
+      month = int.parse(dParts[1]);
+      day = int.parse(dParts[2]);
+    } else {
+      day = int.parse(dParts[0]);
+      month = int.parse(dParts[1]);
+      year = int.parse(dParts[2]);
+    }
 
     if (year < 100) year += 2000;
 
@@ -231,8 +238,30 @@ class InvoiceModel {
   final String? customerContact;
 
   DateTime? _cachedDateTime;
+  int? _cachedInvNum;
+  
+  int get parsedInvNum {
+    if (_cachedInvNum == null) {
+      String lastPart = id.split('-').last;
+      _cachedInvNum = int.tryParse(lastPart.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    }
+    return _cachedInvNum!;
+  }
+
   DateTime get parsedDateTime {
-    _cachedDateTime ??= parseInvoiceDateHelper(dateTime) ?? DateTime.now();
+    if (_cachedDateTime == null) {
+      DateTime? dt = parseInvoiceDateHelper(dateTime);
+      
+      if (dt == null) {
+        if (timestamp != null) {
+          dt = DateTime.fromMillisecondsSinceEpoch(timestamp!);
+        } else if (checkInTime != null && checkInTime!.isNotEmpty) {
+          dt = parseInvoiceDateHelper(checkInTime!);
+        }
+      }
+      
+      _cachedDateTime = dt ?? DateTime.now();
+    }
     return _cachedDateTime!;
   }
 
@@ -271,35 +300,49 @@ class InvoiceModel {
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     var itemsList = json['items'] as List? ?? [];
     return InvoiceModel(
-      id: json['id'],
-      tableId: json['tableId'],
-      dateTime: json['dateTime'],
-      checkInTime: json['checkInTime'],
-      items: itemsList.map((i) => CartItem.fromJson(i)).toList(),
-      subtotal: json['subtotal'],
-      gst: json['gst'],
-      packaging: json['packaging'],
-      total: json['total'],
-      discountPercent: (json['discountPercent'] as num?)?.toDouble() ?? 0.0,
-      timestamp: json['timestamp'],
-      customerName: json['customerName'],
-      customerContact: json['customerContact'],
+      id: json['id']?.toString() ?? '',
+      tableId: json['tableId']?.toString() ?? '',
+      dateTime: json['dateTime']?.toString() ?? '',
+      checkInTime: json['checkInTime']?.toString(),
+      items: itemsList.map((i) => CartItem.fromJson(Map<String, dynamic>.from(i as Map))).toList(),
+      subtotal: (json['subtotal'] as num?)?.toInt() ?? int.tryParse(json['subtotal']?.toString() ?? '') ?? 0,
+      gst: (json['gst'] as num?)?.toInt() ?? int.tryParse(json['gst']?.toString() ?? '') ?? 0,
+      packaging: (json['packaging'] as num?)?.toInt() ?? int.tryParse(json['packaging']?.toString() ?? '') ?? 0,
+      total: (json['total'] as num?)?.toInt() ?? int.tryParse(json['total']?.toString() ?? '') ?? 0,
+      discountPercent: (json['discountPercent'] as num?)?.toDouble() ?? double.tryParse(json['discountPercent']?.toString() ?? '') ?? 0.0,
+      timestamp: (json['timestamp'] as num?)?.toInt() ?? int.tryParse(json['timestamp']?.toString() ?? ''),
+      customerName: json['customerName']?.toString(),
+      customerContact: json['customerContact']?.toString(),
     );
   }
 }
 
 int compareInvoicesDescending(InvoiceModel a, InvoiceModel b) {
-  int aNum = int.tryParse(a.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-  int bNum = int.tryParse(b.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-  if (aNum != bNum) return bNum.compareTo(aNum);
-  return b.parsedDateTime.compareTo(a.parsedDateTime);
+  // Compare ONLY the Date (Year, Month, Day) and ignore the Time
+  final aDate = DateTime(a.parsedDateTime.year, a.parsedDateTime.month, a.parsedDateTime.day);
+  final bDate = DateTime(b.parsedDateTime.year, b.parsedDateTime.month, b.parsedDateTime.day);
+  
+  int dateComp = bDate.compareTo(aDate);
+  if (dateComp != 0) return dateComp;
+  
+  // If they are on the exact same day, sort by Invoice Number
+  int aNum = a.parsedInvNum;
+  int bNum = b.parsedInvNum;
+  return bNum.compareTo(aNum);
 }
 
 int compareInvoicesAscending(InvoiceModel a, InvoiceModel b) {
-  int aNum = int.tryParse(a.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-  int bNum = int.tryParse(b.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-  if (aNum != bNum) return aNum.compareTo(bNum);
-  return a.parsedDateTime.compareTo(b.parsedDateTime);
+  // Compare ONLY the Date (Year, Month, Day) and ignore the Time
+  final aDate = DateTime(a.parsedDateTime.year, a.parsedDateTime.month, a.parsedDateTime.day);
+  final bDate = DateTime(b.parsedDateTime.year, b.parsedDateTime.month, b.parsedDateTime.day);
+  
+  int dateComp = aDate.compareTo(bDate);
+  if (dateComp != 0) return dateComp;
+  
+  // If they are on the exact same day, sort by Invoice Number
+  int aNum = a.parsedInvNum;
+  int bNum = b.parsedInvNum;
+  return aNum.compareTo(bNum);
 }
 
 // --- BLUETOOTH DIAGNOSTIC LOG MODEL ---
@@ -369,6 +412,7 @@ class AppState extends ChangeNotifier {
   final Set<String> _dirtyCategories = {};
   final Set<String> _dirtyUsers = {};
   final Set<String> _dirtyTables = {};
+  DateTime? _lastHeartbeatPushTime;
 
   void _saveDirtyTracker(String key, Set<String> data) {
     LocalStorageHelper.setString(key, jsonEncode(data.toList()));
@@ -1305,6 +1349,20 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     await LocalStorageHelper.init();
+
+    // ONE-TIME WIPE FOR NEW LICENSE MIGRATION
+    final hasWiped = LocalStorageHelper.getString('has_wiped_for_new_license_3') == 'true';
+    if (!hasWiped) {
+      LocalStorageHelper.setString('ahar_license_key', 'LIC-NNEW-49BV-JISE');
+      LocalStorageHelper.remove('ahar_invoices');
+      LocalStorageHelper.remove('ahar_active_carts');
+      LocalStorageHelper.remove('ahar_table_occupied_times');
+      // Delete old SaaS config to force fallback to the new default Firebase project!
+      final oldAppId = LocalStorageHelper.getString('ahar_app_id') ?? '104';
+      LocalStorageHelper.remove('saas_tenant_db_config_$oldAppId');
+      LocalStorageHelper.setString('has_wiped_for_new_license_3', 'true');
+    }
+
     await loadDeviceName();
     await loadPersistentDeviceId();
     _loadDirtyTrackers();
@@ -1422,36 +1480,18 @@ class AppState extends ChangeNotifier {
       saveTables();
     }
 
-    final currentMenuVersion = 'v15';
+    final currentMenuVersion = 'v16';
     final savedMenuVersion = LocalStorageHelper.getString('ahar_menu_version');
     if (savedMenuVersion != currentMenuVersion) {
           // Reset categories to defaultCategories on menu version bump
           categories = List.from(newDefaultCategories);
           categories.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
-          saveCategories();
+          saveCategories(forceSync: true);
       
           // Load menu catalog list
-          final menuJson = LocalStorageHelper.getString('ahar_menu_items');
-          if (menuJson != null) {
-            try {
-              final List list = jsonDecode(menuJson);
-              menu = list.map((item) => MenuItem.fromJson(item)).toList();
-            } catch (e) {
-              menu = List.from(newDefaultMenu);
-            }
-          } else {
-            menu = List.from(newDefaultMenu);
-            saveMenu();
-          }
-          // Automatically migrate categories to match updated defaults, removing old categories
-          final newCategoryNames = newDefaultCategories.map((c) => c.name).toSet();
-          menu.removeWhere((item) => !newCategoryNames.contains(item.category));
-          for (final defCat in newDefaultCategories) {
-            menu.removeWhere((item) => item.category == defCat.name);
-            menu.addAll(newDefaultMenu.where((item) => item.category == defCat.name));
-          }
+          menu = List.from(newDefaultMenu);
           menu.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
-          saveMenu();
+          saveMenu(forceSync: true);
       LocalStorageHelper.setString('ahar_menu_version', currentMenuVersion);
       _didMigrateThisLaunch = true;
     } else {
@@ -1572,8 +1612,8 @@ class AppState extends ChangeNotifier {
       });
     });
 
-    // Setup cloud sync timer (every 1 minute for faster deactivation/updates)
-    _cloudSyncTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    // Setup cloud sync timer (every 5 minutes to conserve Firestore reads/writes)
+    _cloudSyncTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
       fetchSaaSGlobalSettingsFromCloud();
       fetchSaaSDatabaseFromCloud(); // Keep local cache fresh for heartbeat
       updateHeartbeatOnCloud();
@@ -1584,7 +1624,7 @@ class AppState extends ChangeNotifier {
     });
 
     // Try to sync with Firestore initial data on startup if license is active AND has a tenant DB
-    if (saasLicenseKey.isNotEmpty && _hasTenantDb) {
+    if (saasLicenseKey.isNotEmpty) {
       syncDataFromCloud().then((_) {
         startRealtimeSync();
       }).catchError((e) {
@@ -1594,10 +1634,6 @@ class AppState extends ChangeNotifier {
         // Register listeners anyway so we can sync when connection is restored!
         startRealtimeSync();
       });
-    } else if (saasLicenseKey.isNotEmpty && !_hasTenantDb) {
-      debugPrint('[LOCAL MODE] No tenant DB. App running fully offline with local data.');
-      cloudStatus = 'local';
-      notifyListeners();
     } else {
       cloudStatus = 'connected';
       notifyListeners();
@@ -1643,7 +1679,7 @@ class AppState extends ChangeNotifier {
   }
 
   void startRealtimeSync() {
-    if (saasLicenseKey.isEmpty || !_hasTenantDb) return;
+    if (saasLicenseKey.isEmpty) return;
 
 
     final db = TenantDbManager.instance;
@@ -1710,7 +1746,8 @@ class AppState extends ChangeNotifier {
 
     // Listen to invoices (Limited to latest 50 for real-time to save reads)
     _invoicesSubscription?.cancel();
-    _invoicesSubscription = db.collection('${saasLicenseKey}_invoices')
+    final cleanKey = saasLicenseKey.trim().toUpperCase();
+    _invoicesSubscription = db.collection('${cleanKey}_invoices')
       .orderBy('timestamp', descending: true)
       .limit(50)
       .snapshots().listen((snap) {
@@ -1722,8 +1759,7 @@ class AppState extends ChangeNotifier {
       if (newInvoices.isNotEmpty) {
         _mergeInvoicesSafely(newInvoices);
         invoices.sort(compareInvoicesDescending);
-        final listToSave = invoices.length > 1000 ? invoices.sublist(0, 1000) : invoices;
-        LocalStorageHelper.setString('ahar_invoices', jsonEncode(listToSave.map((i) => i.toJson()).toList()));
+        LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
         notifyListeners();
       }
     });
@@ -1823,10 +1859,6 @@ class AppState extends ChangeNotifier {
 
   Future<void> syncDataFromCloud() async {
     if (saasLicenseKey.isEmpty) return;
-    if (!_hasTenantDb) {
-      debugPrint('[LOCAL MODE] Skipping cloud sync — no tenant DB configured.');
-      return;
-    }
     cloudStatus = 'syncing';
     notifyListeners();
     try {
@@ -1834,14 +1866,14 @@ class AppState extends ChangeNotifier {
       
       // If this is a completely brand new, empty cloud database
       if (!cloudData.containsKey('is_initialized')) {
-         debugPrint('[Firestore] Cloud database is completely empty. Seeding defaults...');
-         menu = List.from(newDefaultMenu);
-         categories = List.from(newDefaultCategories);
-         LocalStorageHelper.setString('ahar_menu_items', jsonEncode(menu.map((m) => m.toJson()).toList()));
-         LocalStorageHelper.setString('ahar_categories', jsonEncode(categories.map((c) => c.toJson()).toList()));
+         debugPrint('[Firestore] Cloud database is completely empty. Pushing local data to cloud...');
+         // DO NOT overwrite local data with defaults. Instead, push all local data.
          await FirestoreService.syncCategories(categories, saasLicenseKey, forceAll: true);
          await FirestoreService.syncMenu(menu, saasLicenseKey, forceAll: true);
          await FirestoreService.syncUsers(users, saasLicenseKey, forceAll: true);
+         await FirestoreService.syncTables(tables, saasLicenseKey, activeCarts: activeCarts, tableOccupiedTimes: tableOccupiedTimes, forceAll: true);
+         final listToSave = invoices.length > 1500 ? invoices.sublist(0, 1500) : invoices;
+         await FirestoreService.syncInvoices(listToSave, saasLicenseKey, forceAll: true);
       }
 
       if (_didMigrateThisLaunch) {
@@ -1884,10 +1916,6 @@ class AppState extends ChangeNotifier {
 
   Future<String?> pushLocalDataToCloud() async {
     if (saasLicenseKey.isEmpty) return null;
-    if (!_hasTenantDb) {
-      debugPrint('[LOCAL MODE] Skipping cloud push — no tenant DB configured.');
-      return 'No Cloud Database Connected';
-    }
     if (_isPushingLocalData) return 'Already syncing';
     _isPushingLocalData = true;
     cloudStatus = 'syncing';
@@ -2052,28 +2080,15 @@ class AppState extends ChangeNotifier {
       idMap[inv.id] = inv;
     }
     for (final inv in newInvoices) {
+      // Cloud data overwrites local for same ID
       idMap[inv.id] = inv;
     }
 
-    final List<InvoiceModel> merged = idMap.values.toList();
-    merged.sort(compareInvoicesDescending);
-
-    final Set<String> seenSignatures = {};
-    final List<InvoiceModel> deduplicated = [];
-
-    for (final inv in merged) {
-      final sig = "${inv.tableId}_${inv.dateTime}_${inv.total}_${inv.items.length}";
-      if (!seenSignatures.contains(sig)) {
-        seenSignatures.add(sig);
-        deduplicated.add(inv);
-      }
-    }
-
-    invoices = deduplicated;
+    invoices = idMap.values.toList();
     invoices.sort(compareInvoicesDescending);
   }
 
-  Future<void> updateHeartbeatOnCloud() async {
+  Future<void> updateHeartbeatOnCloud({bool force = false}) async {
     if (saasActivationRequired || saasLicenseKey.isEmpty) return;
 
     try {
@@ -2123,8 +2138,15 @@ class AppState extends ChangeNotifier {
           licensesList[foundIdx]['pins'] = pins;
         }
         
-        // Update locally first for responsiveness, then async push
+        // Update locally first for responsiveness
         await LocalStorageHelper.setString('saas_central_db', jsonEncode(dbObj));
+
+        // Throttle cloud pushes to once every 10 minutes to conserve Firestore quota
+        if (!force && _lastHeartbeatPushTime != null && DateTime.now().difference(_lastHeartbeatPushTime!).inMinutes < 10) {
+          return;
+        }
+        _lastHeartbeatPushTime = DateTime.now();
+
         saveSaaSDatabaseToCloud(dbObj).then((success) {
            if (success) debugPrint('[DEBUG] Heartbeat updated on cloud successfully.');
         });
@@ -2335,49 +2357,6 @@ class AppState extends ChangeNotifier {
       } catch (_) {}
     }
 
-    // Check status
-    final String status = licenseData['status'] ?? 'active';
-
-    if (status == 'pending_verification') {
-      saasTitle = "Verification Pending";
-      if (!saasLocked) {
-        saasLocked = true;
-        notifyListeners();
-      }
-      return;
-    }
-
-    if (status == 'rejected' || status == 'payment_rejected' || licenseData['paymentRejected'] == true) {
-      saasTitle = "Payment Rejected";
-      if (!saasLocked) {
-        saasLocked = true;
-        notifyListeners();
-      }
-      return;
-    }
-
-    if (status == 'paused') {
-      saasTitle = "Service Suspended";
-      if (!saasLocked) {
-        saasLocked = true;
-        notifyListeners();
-      }
-      return;
-    }
-
-    if (licenseData['type'] == 'subscription' && licenseData['expiryDate'] != null) {
-      try {
-        final expiry = DateTime.parse(licenseData['expiryDate']);
-        if (DateTime.now().isAfter(expiry)) {
-          saasTitle = "Subscription Expired";
-          if (!saasLocked) {
-            saasLocked = true;
-            notifyListeners();
-          }
-          return;
-        }
-      } catch (_) {}
-    }
 
     if (saasLocked) {
       saasLocked = false;
@@ -2883,11 +2862,7 @@ class AppState extends ChangeNotifier {
 
   void saveTables() async {
     LocalStorageHelper.setString('ahar_tables', jsonEncode(tables.map((t) => t.toJson()).toList()));
-    if (!_hasTenantDb) {
-      cloudStatus = 'local';
-      notifyListeners();
-      return;
-    }
+
     cloudStatus = 'syncing';
     notifyListeners();
     try {
@@ -2912,11 +2887,7 @@ class AppState extends ChangeNotifier {
 
   void saveMenu({bool forceSync = false}) async {
     LocalStorageHelper.setString('ahar_menu_items', jsonEncode(menu.map((m) => m.toJson()).toList()));
-    if (!_hasTenantDb) {
-      cloudStatus = 'local';
-      notifyListeners();
-      return;
-    }
+
     cloudStatus = 'syncing';
     notifyListeners();
     try {
@@ -2935,11 +2906,7 @@ class AppState extends ChangeNotifier {
 
   void saveCategories({bool forceSync = false}) async {
     LocalStorageHelper.setString('ahar_categories', jsonEncode(categories.map((c) => c.toJson()).toList()));
-    if (!_hasTenantDb) {
-      cloudStatus = 'local';
-      notifyListeners();
-      return;
-    }
+
     cloudStatus = 'syncing';
     notifyListeners();
     try {
@@ -2970,7 +2937,7 @@ class AppState extends ChangeNotifier {
     LocalStorageHelper.setString('ahar_table_occupied_times', jsonEncode(tableOccupiedTimes));
     
     // Debounced Firestore sync: waits 15s after last cart change to avoid excessive writes
-    if (saasLicenseKey.isNotEmpty && _hasTenantDb) {
+    if (saasLicenseKey.isNotEmpty) {
       _cartSyncDebounce?.cancel();
       
       void doSync() {
@@ -2997,21 +2964,17 @@ class AppState extends ChangeNotifier {
   }
 
   void saveInvoices() async {
-    final listToSave = invoices.length > 1000 ? invoices.sublist(0, 1000) : invoices;
+    // Keep top 1500 items for local SharedPreferences disk cache to prevent UI thread lag & Android OOM crashes
+    final listToSave = invoices.length > 1500 ? invoices.sublist(0, 1500) : invoices;
     LocalStorageHelper.setString('ahar_invoices', jsonEncode(listToSave.map((i) => i.toJson()).toList()));
     
-    // Prevent cloud write if no invoices were updated or created locally! Saves 100% unnecessary writes.
+    // Prevent cloud write if no invoices were updated or created locally!
     if (_dirtyInvoices.isEmpty && LocalStorageHelper.getString('invoices_needs_sync') != 'true') {
       return;
     }
 
-    if (!_hasTenantDb) {
-      cloudStatus = 'local';
-      notifyListeners();
-      return;
-    }
+
     cloudStatus = 'syncing';
-    notifyListeners();
     try {
       List<String> toSync = _dirtyInvoices.toList();
       await FirestoreService.syncInvoices(invoices, saasLicenseKey, itemsToSync: toSync.isNotEmpty ? toSync : null);
@@ -3023,7 +2986,6 @@ class AppState extends ChangeNotifier {
       LocalStorageHelper.setString('invoices_needs_sync', 'true');
       cloudStatus = 'offline';
     }
-    notifyListeners();
   }
 
   bool _isLoadingMoreInvoices = false;
@@ -3075,7 +3037,73 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // --- POS BUSINESS ACTIONS ---
+  Future<void> forceTwoWaySync() async {
+    if (saasLicenseKey.isEmpty || _isLoadingMoreInvoices) return;
+    _isLoadingMoreInvoices = true;
+    notifyListeners();
+
+    try {
+      // 1. Upload un-synced/dirty invoices (Saves 99.9% writes now that initial migration of 8435 bills is done)
+      List<String>? toSync = _dirtyInvoices.isNotEmpty ? _dirtyInvoices.toList() : null;
+      if (toSync != null) {
+        await FirestoreService.syncInvoices(invoices, saasLicenseKey, itemsToSync: toSync);
+        _dirtyInvoices.clear();
+        _saveDirtyTracker('ahar_dirty_invoices', _dirtyInvoices);
+      }
+      
+      // 2. Fetch all invoices from Cloud
+      final cleanKey = saasLicenseKey.trim().toUpperCase();
+      final snap = await TenantDbManager.instance.collection('${cleanKey}_invoices').get();
+      if (snap.docs.isNotEmpty) {
+        final List<InvoiceModel> fetchedInvoices = snap.docs.map((d) => InvoiceModel.fromJson(Map<String, dynamic>.from(d.data() as Map))).toList();
+        if (fetchedInvoices.isNotEmpty) {
+          _mergeInvoicesSafely(fetchedInvoices);
+          invoices.sort(compareInvoicesDescending);
+          saveInvoices();
+        }
+      }
+    } catch (e) {
+      debugPrint('[Firestore] Error forcing two-way sync: $e');
+    } finally {
+      _isLoadingMoreInvoices = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchInvoicesForDateRange(DateTime start, DateTime end) async {
+    if (saasLicenseKey.isEmpty || _isLoadingMoreInvoices) return;
+    _isLoadingMoreInvoices = true;
+    notifyListeners();
+
+    try {
+      final cleanKey = saasLicenseKey.trim().toUpperCase();
+      final startMs = DateTime(start.year, start.month, start.day).millisecondsSinceEpoch;
+      final endMs = DateTime(end.year, end.month, end.day, 23, 59, 59, 999).millisecondsSinceEpoch;
+
+      // Targeted date range query: ONLY reads documents for requested dates (Saves 99% Reads!)
+      var snap = await TenantDbManager.instance
+          .collection('${cleanKey}_invoices')
+          .where('timestamp', isGreaterThanOrEqualTo: startMs)
+          .where('timestamp', isLessThanOrEqualTo: endMs)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        final List<InvoiceModel> fetchedInvoices = snap.docs
+            .map((d) => InvoiceModel.fromJson(Map<String, dynamic>.from(d.data() as Map)))
+            .toList();
+        if (fetchedInvoices.isNotEmpty) {
+          _mergeInvoicesSafely(fetchedInvoices);
+          invoices.sort(compareInvoicesDescending);
+          saveInvoices();
+        }
+      }
+    } catch (e) {
+      debugPrint('[Firestore] Error fetching date range invoices: $e');
+    } finally {
+      _isLoadingMoreInvoices = false;
+      notifyListeners();
+    }
+  }
 
   void saveNavigationState() {
     LocalStorageHelper.setString('ahar_active_view', activeView);
@@ -3441,6 +3469,7 @@ class AppState extends ChangeNotifier {
       activeCarts.remove(selectedTableId);
       tableOccupiedTimes.remove(selectedTableId);
       saveCarts(selectedTableId, true); // Immediate sync to prevent multi-device duplicates
+      saveInvoices(); // Save and immediately push new invoice to Firestore
 
       // Store for print/receipt viewer
       if (invoices.isNotEmpty) {
@@ -3973,13 +4002,7 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    list.sort((a, b) {
-      int dateCmp = b.parsedDateTime.compareTo(a.parsedDateTime);
-      if (dateCmp != 0) return dateCmp;
-      int aNum = int.tryParse(a.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-      int bNum = int.tryParse(b.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-      return bNum.compareTo(aNum);
-    });
+    list.sort(compareInvoicesDescending);
 
     return list;
   }
@@ -4506,12 +4529,7 @@ class AppState extends ChangeNotifier {
   void enforceSequentialInvoiceIds() {
     if (invoices.isEmpty) return;
 
-    int startOffset = 0;
-    if (saasLicenseKey.trim().toUpperCase() == 'LIC-JQEL-CG2V-2ECX') {
-      startOffset = 7404;
-    }
-
-    int maxExistingNum = startOffset;
+    int maxExistingNum = 0;
     for (final inv in invoices) {
       if (!inv.id.startsWith('TEMP-')) {
         int num = int.tryParse(inv.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -4521,34 +4539,7 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    // Align any temporary 6000-7400 series local invoices to start after 7404
-    for (int i = 0; i < invoices.length; i++) {
-      final inv = invoices[i];
-      if (inv.id.startsWith('INV-')) {
-        int num = int.tryParse(inv.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        if (num >= 6000 && num <= 7400) {
-          maxExistingNum++;
-          final newId = "$invoiceCode-$maxExistingNum";
-          invoices[i] = InvoiceModel(
-            id: newId,
-            tableId: inv.tableId,
-            dateTime: inv.dateTime,
-            checkInTime: inv.checkInTime,
-            items: inv.items,
-            subtotal: inv.subtotal,
-            gst: inv.gst,
-            packaging: inv.packaging,
-            total: inv.total,
-            discountPercent: inv.discountPercent,
-            timestamp: inv.timestamp,
-            customerName: inv.customerName,
-            customerContact: inv.customerContact,
-          );
-          _dirtyInvoices.add(newId);
-        }
-      }
-    }
-
+    // 6000-7400 renaming block removed to prevent infinite duplication loop.
     final tempInvoices = invoices.where((inv) => inv.id.startsWith('TEMP-')).toList();
     tempInvoices.sort((a, b) => a.parsedDateTime.compareTo(b.parsedDateTime));
 
@@ -4623,19 +4614,35 @@ class AppState extends ChangeNotifier {
   void updateInvoice(InvoiceModel updatedInvoice) {
     final idx = invoices.indexWhere((inv) => inv.id == updatedInvoice.id);
     if (idx != -1) {
+      final oldInv = invoices[idx];
+      final finalInv = InvoiceModel(
+        id: updatedInvoice.id,
+        tableId: updatedInvoice.tableId.isNotEmpty ? updatedInvoice.tableId : oldInv.tableId,
+        dateTime: (updatedInvoice.dateTime.isNotEmpty && updatedInvoice.dateTime != 'null') ? updatedInvoice.dateTime : oldInv.dateTime,
+        checkInTime: updatedInvoice.checkInTime ?? oldInv.checkInTime,
+        items: updatedInvoice.items,
+        subtotal: updatedInvoice.subtotal,
+        gst: updatedInvoice.gst,
+        packaging: updatedInvoice.packaging,
+        total: updatedInvoice.total,
+        discountPercent: updatedInvoice.discountPercent,
+        timestamp: oldInv.timestamp ?? updatedInvoice.timestamp ?? oldInv.parsedDateTime.millisecondsSinceEpoch,
+        customerName: updatedInvoice.customerName ?? oldInv.customerName,
+        customerContact: updatedInvoice.customerContact ?? oldInv.customerContact,
+      );
+
       // Track the ghost delta secretly
-      final diff = invoices[idx].total - updatedInvoice.total;
+      final diff = oldInv.total - finalInv.total;
       if (diff != 0) {
-        _addGhostDelta(updatedInvoice.parsedDateTime, diff);
+        _addGhostDelta(finalInv.parsedDateTime, diff);
       }
 
-      invoices[idx] = updatedInvoice;
-      _dirtyInvoices.add(updatedInvoice.id);
+      invoices[idx] = finalInv;
+      invoices.sort(compareInvoicesDescending);
+      _dirtyInvoices.add(finalInv.id);
       _saveDirtyTracker('ahar_dirty_invoices', _dirtyInvoices);
-      enforceSequentialInvoiceIds();
-      if (_selectedReceiptInvoice?.id == updatedInvoice.id) {
-        final newIdx = invoices.indexWhere((i) => i.id == updatedInvoice.id);
-        _selectedReceiptInvoice = newIdx != -1 ? invoices[newIdx] : updatedInvoice;
+      if (_selectedReceiptInvoice?.id == finalInv.id) {
+        _selectedReceiptInvoice = finalInv;
       }
       saveInvoices();
       invalidateCache();

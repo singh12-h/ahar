@@ -44,14 +44,15 @@ class FirestoreService {
 
   // Sync Invoices to Firestore
   static Future<void> syncInvoices(List<InvoiceModel> invoices, String licenseKey, {void Function(String)? onProgress, List<String>? itemsToSync, bool forceAll = false}) async {
-    if (licenseKey.isEmpty) return;
+    final cleanKey = licenseKey.trim().toUpperCase();
+    if (cleanKey.isEmpty) return;
     if (itemsToSync == null && !forceAll) {
       debugPrint('[Firestore] syncInvoices called with null itemsToSync and forceAll is false. Skipping bulk upload to save writes.');
       return;
     }
     await processOfflineDeletes();
     try {
-      final chunkSize = 10;
+      final chunkSize = 400;
       for (var i = 0; i < invoices.length; i += chunkSize) {
         final batch = _db.batch();
         final end = (i + chunkSize < invoices.length) ? i + chunkSize : invoices.length;
@@ -63,7 +64,7 @@ class FirestoreService {
         
         for (final inv in chunk) {
           if (!forceAll && itemsToSync != null && !itemsToSync.contains(inv.id)) continue;
-          final docRef = _db.collection('${licenseKey}_invoices').doc(inv.id);
+          final docRef = _db.collection('${cleanKey}_invoices').doc(inv.id);
           batch.set(docRef, inv.toJson(), SetOptions(merge: true));
         }
         await batch.commit();
@@ -76,8 +77,9 @@ class FirestoreService {
   }
 
   static Future<void> deleteInvoice(String invoiceId, String licenseKey) async {
-    if (licenseKey.isEmpty) return;
-    final coll = '${licenseKey}_invoices';
+    final cleanKey = licenseKey.trim().toUpperCase();
+    if (cleanKey.isEmpty) return;
+    final coll = '${cleanKey}_invoices';
     try {
       await _db.collection(coll).doc(invoiceId).delete();
       debugPrint('[Firestore] Invoice $invoiceId deleted successfully.');

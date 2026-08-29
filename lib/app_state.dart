@@ -1765,12 +1765,12 @@ class AppState extends ChangeNotifier {
       }
     });
 
-    // Listen to invoices (Limited to latest 50 for real-time to save reads)
+    // Listen to invoices (Targeted to latest 60 present-day bills to save cloud reads)
     _invoicesSubscription?.cancel();
     final cleanKey = saasLicenseKey.trim().toUpperCase();
     _invoicesSubscription = db.collection('${cleanKey}_invoices')
       .orderBy('timestamp', descending: true)
-      .limit(500)
+      .limit(60)
       .snapshots().listen((snap) {
       if (LocalStorageHelper.getString('invoices_needs_sync') == 'true') {
         saveInvoices();
@@ -1921,12 +1921,12 @@ class AppState extends ChangeNotifier {
            LocalStorageHelper.remove('categories_needs_sync');
          }
 
-         // Always fetch latest invoices on startup to sync latest sequence across all devices
+         // Only fetch latest present-day bills (latest 50) on startup to save cloud reads
          try {
            final snap = await TenantDbManager.instance
                .collection('${saasLicenseKey}_invoices')
                .orderBy('timestamp', descending: true)
-               .limit(invoices.isEmpty ? 500 : 50)
+               .limit(50)
                .get()
                .timeout(const Duration(seconds: 4));
            if (snap.docs.isNotEmpty) {
@@ -1935,7 +1935,7 @@ class AppState extends ChangeNotifier {
              invoices.sort(compareInvoicesDescending);
              enforceSequentialInvoiceIds();
              LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
-             debugPrint('[Firestore] Synchronized latest invoice sequence with cloud on startup.');
+             debugPrint('[Firestore] Synchronized present day invoices with cloud on startup.');
            }
          } catch (e) {
            debugPrint('[Firestore] Cloud sequence sync on startup: $e');

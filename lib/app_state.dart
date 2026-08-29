@@ -2637,51 +2637,9 @@ class AppState extends ChangeNotifier {
         // Start heartbeat immediately on successful activation
         updateHeartbeatOnCloud();
 
-        if (_hasTenantDb) {
-          // Sync data from cloud for this license key (CLOUD MODE)
-          await syncDataFromCloud();
-          startRealtimeSync();
-        } else {
-          // LOCAL MODE: Clear all old shop data and load fresh defaults
-          debugPrint('[LOCAL MODE] Clearing all previous shop data for fresh activation...');
-          
-          // Clear old shop settings
-          LocalStorageHelper.remove('ahar_store_name');
-          LocalStorageHelper.remove('ahar_store_logo');
-          LocalStorageHelper.remove('ahar_store_gstin');
-          LocalStorageHelper.remove('ahar_parcel_delivery_charge');
-          LocalStorageHelper.remove('ahar_is_gst_inclusive');
-          LocalStorageHelper.remove('ahar_show_gst_on_bills');
-          LocalStorageHelper.remove('ahar_allow_discounts');
-          LocalStorageHelper.remove('ahar_default_gst_rate');
-          LocalStorageHelper.remove('ahar_invoices');
-          LocalStorageHelper.remove('ahar_active_carts');
-          LocalStorageHelper.remove('ahar_table_occupied_times');
-          LocalStorageHelper.remove('ahar_menu_items');
-          LocalStorageHelper.remove('ahar_categories');
-          LocalStorageHelper.remove('ahar_tables');
-
-          // Reset in-memory state
-          storeName = 'My Restaurant';
-          storeLogoBase64 = '';
-          storeGstin = '';
-          defaultGstRate = 5;
-          isGstInclusive = false;
-          showGstOnBills = false;
-          allowDiscounts = false;
-          invoices = [];
-          activeCarts = {};
-          tableOccupiedTimes = {};
-
-          menu = List.from(newDefaultMenu);
-          categories = List.from(newDefaultCategories);
-          tables = List.from(defaultTablesList);
-          saveMenu();
-          saveCategories();
-          saveTables();
-          cloudStatus = 'local';
-          debugPrint('[LOCAL MODE] App activated in local-only mode. Data stored on device.');
-        }
+        // Always sync with cloud and start realtime sync on successful activation
+        await syncDataFromCloud();
+        startRealtimeSync();
         await fetchSaaSGlobalSettingsFromCloud();
 
         checkSaaSStatus();

@@ -3542,10 +3542,29 @@ class InvoicesListView extends StatelessWidget {
         title: const Text('Invoices', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         actions: [
           IconButton(
+            icon: state.isLoadingMoreInvoices
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)))
+                : const Icon(Icons.sync, color: Color(0xFF10B981)),
+            tooltip: 'Sync Cloud Invoices',
+            onPressed: () async {
+              await state.syncDataFromCloud();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Invoices synced with cloud!'),
+                    backgroundColor: Color(0xFF10B981),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
+          IconButton(
             icon: Icon(
               Icons.filter_alt_outlined,
               color: state.activeInvoiceFilter != null ? const Color(0xFF10B981) : Colors.white,
             ),
+            tooltip: 'Filter by Date',
             onPressed: () => state.navigateToView('invoice-filter'),
           ),
           const SizedBox(width: 8),

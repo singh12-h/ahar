@@ -13778,7 +13778,7 @@ Future<void> printMonospacedReceiptHelper(BuildContext context, AppState state) 
   final ampm = now.hour >= 12 ? 'PM' : 'AM';
   final nowStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, $hStr:$mStr:$sStr $ampm";
 
-  int maxExistingNum = 0;
+  int maxExistingNum = 9999;
   for (final inv in state.invoices) {
     if (!inv.id.startsWith('TEMP-')) {
       int num = int.tryParse(inv.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -13787,7 +13787,7 @@ Future<void> printMonospacedReceiptHelper(BuildContext context, AppState state) 
       }
     }
   }
-  final nextSeqNum = maxExistingNum > 0 ? (maxExistingNum + 1) : 1;
+  final nextSeqNum = maxExistingNum + 1;
   final predictedInvoiceId = "${state.invoiceCode}-$nextSeqNum";
 
   final receiptText = formatReceiptText(

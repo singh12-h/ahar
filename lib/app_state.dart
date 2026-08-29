@@ -43,6 +43,25 @@ class UserProfile {
   int get hashCode => name.hashCode ^ pin.hashCode ^ role.hashCode;
 }
 
+int _safeInt(dynamic val, [int fallback = 0]) {
+  if (val == null) return fallback;
+  if (val is int) return val;
+  if (val is double) return val.round();
+  if (val is num) return val.toInt();
+  final s = val.toString().trim();
+  final d = double.tryParse(s);
+  if (d != null) return d.round();
+  return fallback;
+}
+
+double _safeDouble(dynamic val, [double fallback = 0.0]) {
+  if (val == null) return fallback;
+  if (val is double) return val;
+  if (val is int) return val.toDouble();
+  if (val is num) return val.toDouble();
+  return double.tryParse(val.toString().trim()) ?? fallback;
+}
+
 class MenuItem {
   final int id;
   final String name;
@@ -76,14 +95,14 @@ class MenuItem {
   };
 
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
-    id: json['id'],
-    name: json['name'],
-    price: json['price'],
-    category: json['category'],
-    desc: json['desc'] ?? '',
-    serialNumber: json['serialNumber'] ?? json['id'],
-    isVeg: json['isVeg'] ?? true,
-    gstRate: json['gstRate'] ?? 5,
+    id: _safeInt(json['id']),
+    name: json['name']?.toString() ?? '',
+    price: _safeInt(json['price']),
+    category: json['category']?.toString() ?? '',
+    desc: json['desc']?.toString() ?? '',
+    serialNumber: _safeInt(json['serialNumber'], _safeInt(json['id'])),
+    isVeg: json['isVeg'] is bool ? json['isVeg'] : (json['isVeg']?.toString().toLowerCase() == 'true'),
+    gstRate: _safeInt(json['gstRate'], 5),
   );
 }
 
@@ -117,13 +136,13 @@ class CartItem {
   };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
-    id: (json['id'] as num?)?.toInt() ?? int.tryParse(json['id']?.toString() ?? '') ?? 0,
+    id: _safeInt(json['id']),
     name: json['name']?.toString() ?? '',
-    price: (json['price'] as num?)?.toInt() ?? int.tryParse(json['price']?.toString() ?? '') ?? 0,
+    price: _safeInt(json['price']),
     category: json['category']?.toString() ?? '',
-    qty: (json['qty'] as num?)?.toInt() ?? int.tryParse(json['qty']?.toString() ?? '') ?? 1,
-    gstRate: (json['gstRate'] as num?)?.toInt() ?? int.tryParse(json['gstRate']?.toString() ?? '') ?? 5,
-    printedQty: (json['printedQty'] as num?)?.toInt() ?? int.tryParse(json['printedQty']?.toString() ?? '') ?? 0,
+    qty: _safeInt(json['qty'], 1),
+    gstRate: _safeInt(json['gstRate'], 5),
+    printedQty: _safeInt(json['printedQty'], 0),
   );
 }
 
@@ -136,8 +155,8 @@ class TableModel {
   Map<String, dynamic> toJson() => {'id': id, 'type': type};
 
   factory TableModel.fromJson(Map<String, dynamic> json) => TableModel(
-    id: json['id'],
-    type: json['type'],
+    id: json['id']?.toString() ?? '',
+    type: json['type']?.toString() ?? 'table',
   );
 }
 
@@ -153,8 +172,8 @@ class CategoryModel {
   };
 
   factory CategoryModel.fromJson(Map<String, dynamic> json) => CategoryModel(
-    name: json['name'],
-    serialNumber: json['serialNumber'] ?? 0,
+    name: json['name']?.toString() ?? '',
+    serialNumber: _safeInt(json['serialNumber']),
   );
 }
 
@@ -186,37 +205,21 @@ DateTime? parseInvoiceDateHelper(String dateStr) {
 
     if (year < 100) year += 2000;
 
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-
+    int hour = 0, minute = 0, second = 0;
     if (parts.length > 1) {
       final timePart = parts[1];
       final tParts = timePart.split(':');
-      if (tParts.length >= 2) {
-        hour = int.parse(tParts[0]);
-        minute = int.parse(tParts[1]);
-        if (tParts.length >= 3) {
-          second = int.parse(tParts[2].replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        }
-      }
+      if (tParts.isNotEmpty) hour = int.tryParse(tParts[0]) ?? 0;
+      if (tParts.length > 1) minute = int.tryParse(tParts[1]) ?? 0;
+      if (tParts.length > 2) second = int.tryParse(tParts[2]) ?? 0;
 
-      String? ampm;
-      for (int i = 1; i < parts.length; i++) {
-        final upper = parts[i].toUpperCase();
-        if (upper.contains('AM')) ampm = 'AM';
-        if (upper.contains('PM')) ampm = 'PM';
-      }
-
-      if (ampm == 'PM' && hour < 12) {
-        hour += 12;
-      } else if (ampm == 'AM' && hour == 12) {
-        hour = 0;
-      }
+      final ampm = (parts.length > 2 ? parts[2] : (str.contains('PM') ? 'PM' : (str.contains('AM') ? 'AM' : ''))).toUpperCase();
+      if (ampm == 'PM' && hour < 12) hour += 12;
+      if (ampm == 'AM' && hour == 12) hour = 0;
     }
 
     return DateTime(year, month, day, hour, minute, second);
-  } catch (e) {
+  } catch (_) {
     return null;
   }
 }
@@ -298,19 +301,27 @@ class InvoiceModel {
   };
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
-    var itemsList = json['items'] as List? ?? [];
+    var rawItems = json['items'];
+    List<CartItem> parsedItems = [];
+    if (rawItems is List) {
+      for (var item in rawItems) {
+        if (item is Map) {
+          parsedItems.add(CartItem.fromJson(Map<String, dynamic>.from(item)));
+        }
+      }
+    }
     return InvoiceModel(
       id: json['id']?.toString() ?? '',
       tableId: json['tableId']?.toString() ?? '',
       dateTime: json['dateTime']?.toString() ?? '',
       checkInTime: json['checkInTime']?.toString(),
-      items: itemsList.map((i) => CartItem.fromJson(Map<String, dynamic>.from(i as Map))).toList(),
-      subtotal: (json['subtotal'] as num?)?.toInt() ?? int.tryParse(json['subtotal']?.toString() ?? '') ?? 0,
-      gst: (json['gst'] as num?)?.toInt() ?? int.tryParse(json['gst']?.toString() ?? '') ?? 0,
-      packaging: (json['packaging'] as num?)?.toInt() ?? int.tryParse(json['packaging']?.toString() ?? '') ?? 0,
-      total: (json['total'] as num?)?.toInt() ?? int.tryParse(json['total']?.toString() ?? '') ?? 0,
-      discountPercent: (json['discountPercent'] as num?)?.toDouble() ?? double.tryParse(json['discountPercent']?.toString() ?? '') ?? 0.0,
-      timestamp: (json['timestamp'] as num?)?.toInt() ?? int.tryParse(json['timestamp']?.toString() ?? ''),
+      items: parsedItems,
+      subtotal: _safeInt(json['subtotal']),
+      gst: _safeInt(json['gst']),
+      packaging: _safeInt(json['packaging']),
+      total: _safeInt(json['total']),
+      discountPercent: _safeDouble(json['discountPercent']),
+      timestamp: json['timestamp'] != null ? _safeInt(json['timestamp']) : null,
       customerName: json['customerName']?.toString(),
       customerContact: json['customerContact']?.toString(),
     );
@@ -1231,10 +1242,12 @@ class AppState extends ChangeNotifier {
     TableModel(id: "A4", type: "table"),
     TableModel(id: "A5", type: "table"),
     TableModel(id: "A6", type: "table"),
+    TableModel(id: "B1", type: "table"),
     TableModel(id: "B2", type: "table"),
     TableModel(id: "B3", type: "table"),
     TableModel(id: "B4", type: "table"),
     TableModel(id: "B5", type: "table"),
+    TableModel(id: "B6", type: "table"),
     TableModel(id: "C1", type: "table"),
     TableModel(id: "C2", type: "table"),
     TableModel(id: "C3", type: "table"),
@@ -1242,16 +1255,16 @@ class AppState extends ChangeNotifier {
     TableModel(id: "C5", type: "table"),
     TableModel(id: "C6", type: "table"),
     TableModel(id: "D1", type: "table"),
-    TableModel(id: "D",  type: "table"),
     TableModel(id: "D2", type: "table"),
     TableModel(id: "D3", type: "table"),
     TableModel(id: "D4", type: "table"),
-    TableModel(id: "1B", type: "table"),
+    TableModel(id: "D5", type: "table"),
+    TableModel(id: "D6", type: "table"),
     TableModel(id: "PARCEL", type: "parcel"),
     TableModel(id: "PARCEL 2", type: "parcel"),
     TableModel(id: "PARCEL 3", type: "parcel"),
     TableModel(id: "PARCEL 4", type: "parcel"),
-    TableModel(id: "PARCEL 5", type: "parcel")
+    TableModel(id: "PARCEL 5", type: "parcel"),
   ];
 
   final List<CategoryModel> defaultCategories = newDefaultCategories;
@@ -1349,6 +1362,16 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     await LocalStorageHelper.init();
+
+    // ONE-TIME WIPE FOR CLEAN CLOUD INVOICE SYNC
+    final hasWipedInvoices = LocalStorageHelper.getString('has_wiped_clean_invoices_v1') == 'true';
+    if (!hasWipedInvoices) {
+      LocalStorageHelper.remove('ahar_invoices');
+      LocalStorageHelper.remove('ahar_dirty_invoices');
+      LocalStorageHelper.remove('invoices_needs_sync');
+      LocalStorageHelper.setString('has_wiped_clean_invoices_v1', 'true');
+      debugPrint('[AppState] Local invoice cache and dirty queue cleared to protect cloud.');
+    }
 
     // ONE-TIME WIPE FOR NEW LICENSE MIGRATION
     final hasWiped = LocalStorageHelper.getString('has_wiped_for_new_license_3') == 'true';
@@ -1749,7 +1772,7 @@ class AppState extends ChangeNotifier {
     final cleanKey = saasLicenseKey.trim().toUpperCase();
     _invoicesSubscription = db.collection('${cleanKey}_invoices')
       .orderBy('timestamp', descending: true)
-      .limit(50)
+      .limit(500)
       .snapshots().listen((snap) {
       if (LocalStorageHelper.getString('invoices_needs_sync') == 'true') {
         saveInvoices();
@@ -1898,6 +1921,26 @@ class AppState extends ChangeNotifier {
            debugPrint('[Firestore] Local categories have unsynced changes. Pushing to cloud...');
            await FirestoreService.syncCategories(categories, saasLicenseKey, forceAll: true);
            LocalStorageHelper.remove('categories_needs_sync');
+         }
+
+         // If local invoices are empty, load invoices from cloud
+         if (invoices.isEmpty) {
+           try {
+             final snap = await TenantDbManager.instance
+                 .collection('${saasLicenseKey}_invoices')
+                 .limit(1000)
+                 .get()
+                 .timeout(const Duration(seconds: 6));
+             if (snap.docs.isNotEmpty) {
+               final cloudInvoices = snap.docs.map((d) => InvoiceModel.fromJson(Map<String, dynamic>.from(d.data()))).toList();
+               _mergeInvoicesSafely(cloudInvoices);
+               invoices.sort(compareInvoicesDescending);
+               LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
+               debugPrint('[Firestore] Successfully loaded ${invoices.length} invoices from cloud on startup.');
+             }
+           } catch (e) {
+             debugPrint('[Firestore] Error loading cloud invoices on startup: $e');
+           }
          }
       }
       
@@ -4529,7 +4572,7 @@ class AppState extends ChangeNotifier {
   void enforceSequentialInvoiceIds() {
     if (invoices.isEmpty) return;
 
-    int maxExistingNum = 0;
+    int maxExistingNum = 9999; // Live bills start from 10000
     for (final inv in invoices) {
       if (!inv.id.startsWith('TEMP-')) {
         int num = int.tryParse(inv.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;

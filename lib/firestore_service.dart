@@ -44,9 +44,6 @@ class FirestoreService {
 
   // Sync Invoices to Firestore
   static Future<void> syncInvoices(List<InvoiceModel> invoices, String licenseKey, {void Function(String)? onProgress, List<String>? itemsToSync, bool forceAll = false}) async {
-    // STOPPED: Cloud invoice upload is strictly disabled to protect cloud records from local phone overwrites.
-    debugPrint('[Firestore] Invoice upload to cloud is DISABLED to protect cloud database.');
-    return;
     final cleanKey = licenseKey.trim().toUpperCase();
     if (cleanKey.isEmpty) return;
     if (itemsToSync == null && !forceAll) {

@@ -13263,58 +13263,33 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
               ),
 
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0x0CFFFFFF)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Bill Date & Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(height: 4),
-                        Text(_dateTimeStr, style: const TextStyle(fontSize: 12, color: Color(0xFFFF6F24), fontWeight: FontWeight.w600)),
+                        const Text('Bill Date & Time (Fixed)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white70)),
+                        const SizedBox(height: 2),
+                        Text(widget.invoice.dateTime, style: const TextStyle(fontSize: 12.5, color: Color(0xFFFF6F24), fontWeight: FontWeight.bold)),
                       ],
                     ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: widget.invoice.parsedDateTime,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2035),
-                      );
-                      if (pickedDate != null && mounted) {
-                        final pickedTime = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(widget.invoice.parsedDateTime),
-                        );
-                        if (pickedTime != null && mounted) {
-                          final dt = DateTime(
-                            pickedDate.year,
-                            pickedDate.month,
-                            pickedDate.day,
-                            pickedTime.hour,
-                            pickedTime.minute,
-                          );
-                          final h = dt.hour.toString().padLeft(2, '0');
-                          final m = dt.minute.toString().padLeft(2, '0');
-                          final s = dt.second.toString().padLeft(2, '0');
-                          final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-                          setState(() {
-                            _dateTimeStr = "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}, $h:$m:$s $ampm";
-                          });
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.calendar_today, size: 14),
-                    label: const Text('Change Date', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFFF6F24),
-                      side: const BorderSide(color: Color(0xFFFF6F24)),
+                    const Row(
+                      children: [
+                        Icon(Icons.lock_outline, size: 15, color: Colors.white38),
+                        SizedBox(width: 4),
+                        Text('Original', style: TextStyle(fontSize: 11, color: Colors.white38)),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               
               const SizedBox(height: 16),
@@ -13693,7 +13668,7 @@ class _SecretInvoiceEditDialogState extends State<SecretInvoiceEditDialog> {
                             final updatedInv = InvoiceModel(
                               id: widget.invoice.id,
                               tableId: widget.invoice.tableId,
-                              dateTime: _dateTimeStr,
+                              dateTime: widget.invoice.dateTime,
                               checkInTime: widget.invoice.checkInTime,
                               items: _items,
                               subtotal: _subtotal,
@@ -13779,6 +13754,10 @@ Future<void> printMonospacedReceiptHelper(BuildContext context, AppState state) 
   final nowStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}, $hStr:$mStr:$sStr $ampm";
 
   int maxExistingNum = 9999;
+  final savedMax = int.tryParse(LocalStorageHelper.getString('ahar_highest_invoice_num') ?? '') ?? 0;
+  if (savedMax > maxExistingNum) {
+    maxExistingNum = savedMax;
+  }
   for (final inv in state.invoices) {
     if (!inv.id.startsWith('TEMP-')) {
       int num = int.tryParse(inv.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;

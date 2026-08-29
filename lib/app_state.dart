@@ -1376,11 +1376,9 @@ class AppState extends ChangeNotifier {
     // ONE-TIME WIPE FOR NEW LICENSE MIGRATION
     final hasWiped = LocalStorageHelper.getString('has_wiped_for_new_license_3') == 'true';
     if (!hasWiped) {
-      LocalStorageHelper.setString('ahar_license_key', 'LIC-NNEW-49BV-JISE');
       LocalStorageHelper.remove('ahar_invoices');
       LocalStorageHelper.remove('ahar_active_carts');
       LocalStorageHelper.remove('ahar_table_occupied_times');
-      // Delete old SaaS config to force fallback to the new default Firebase project!
       final oldAppId = LocalStorageHelper.getString('ahar_app_id') ?? '104';
       LocalStorageHelper.remove('saas_tenant_db_config_$oldAppId');
       LocalStorageHelper.setString('has_wiped_for_new_license_3', 'true');
@@ -1923,24 +1921,24 @@ class AppState extends ChangeNotifier {
            LocalStorageHelper.remove('categories_needs_sync');
          }
 
-         // If local invoices are empty, load invoices from cloud
-         if (invoices.isEmpty) {
-           try {
-             final snap = await TenantDbManager.instance
-                 .collection('${saasLicenseKey}_invoices')
-                 .limit(1000)
-                 .get()
-                 .timeout(const Duration(seconds: 6));
-             if (snap.docs.isNotEmpty) {
-               final cloudInvoices = snap.docs.map((d) => InvoiceModel.fromJson(Map<String, dynamic>.from(d.data()))).toList();
-               _mergeInvoicesSafely(cloudInvoices);
-               invoices.sort(compareInvoicesDescending);
-               LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
-               debugPrint('[Firestore] Successfully loaded ${invoices.length} invoices from cloud on startup.');
-             }
-           } catch (e) {
-             debugPrint('[Firestore] Error loading cloud invoices on startup: $e');
+         // Always fetch latest invoices on startup to sync latest sequence across all devices
+         try {
+           final snap = await TenantDbManager.instance
+               .collection('${saasLicenseKey}_invoices')
+               .orderBy('timestamp', descending: true)
+               .limit(invoices.isEmpty ? 500 : 50)
+               .get()
+               .timeout(const Duration(seconds: 4));
+           if (snap.docs.isNotEmpty) {
+             final cloudInvoices = snap.docs.map((d) => InvoiceModel.fromJson(Map<String, dynamic>.from(d.data()))).toList();
+             _mergeInvoicesSafely(cloudInvoices);
+             invoices.sort(compareInvoicesDescending);
+             enforceSequentialInvoiceIds();
+             LocalStorageHelper.setString('ahar_invoices', jsonEncode(invoices.map((i) => i.toJson()).toList()));
+             debugPrint('[Firestore] Synchronized latest invoice sequence with cloud on startup.');
            }
+         } catch (e) {
+           debugPrint('[Firestore] Cloud sequence sync on startup: $e');
          }
       }
       
@@ -4573,6 +4571,14 @@ class AppState extends ChangeNotifier {
     if (invoices.isEmpty) return;
 
     int maxExistingNum = 9999; // Live bills start from 10000
+
+    // 1. Check globally saved max sequence in device storage
+    final savedMax = int.tryParse(LocalStorageHelper.getString('ahar_highest_invoice_num') ?? '') ?? 0;
+    if (savedMax > maxExistingNum) {
+      maxExistingNum = savedMax;
+    }
+
+    // 2. Check current in-memory invoices
     for (final inv in invoices) {
       if (!inv.id.startsWith('TEMP-')) {
         int num = int.tryParse(inv.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -4581,6 +4587,9 @@ class AppState extends ChangeNotifier {
         }
       }
     }
+
+    // 3. Save highest known sequence so it is never forgotten even if list is cleared
+    LocalStorageHelper.setString('ahar_highest_invoice_num', maxExistingNum.toString());
 
     // 6000-7400 renaming block removed to prevent infinite duplication loop.
     final tempInvoices = invoices.where((inv) => inv.id.startsWith('TEMP-')).toList();
